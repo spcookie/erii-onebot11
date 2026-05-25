@@ -60,7 +60,7 @@ class WsForwardServer(
     }
 
     override suspend fun start() {
-        server = embeddedServer(Netty, host = config.wsHost, port = config.wsPort) {
+        server = embeddedServer(Netty, host = config.wsForwardServerHost, port = config.wsForwardServerPort) {
             install(WebSockets)
             routing {
                 webSocket("/") { handleUniversalSession() }
@@ -69,7 +69,7 @@ class WsForwardServer(
             }
         }
         server!!.start(wait = false)
-        logger.info("WS Forward server started on ws://{}:{}", config.wsHost, config.wsPort)
+        logger.info("WS Forward server started on ws://{}:{}", config.wsForwardServerHost, config.wsForwardServerPort)
     }
 
     override suspend fun stop() {

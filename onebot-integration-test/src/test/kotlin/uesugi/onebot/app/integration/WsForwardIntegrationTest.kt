@@ -36,7 +36,7 @@ class WsForwardIntegrationTest {
     @Test
     fun testWsSendAndReceiveMessage() = runBlocking {
         val mockBotConfig = OneBotConfig(
-            wsEnable = true, wsHost = "127.0.0.1", wsPort = 6710,
+            wsForwardServerEnable = true, wsForwardServerHost = "127.0.0.1", wsForwardServerPort = 6710,
             selfId = 10001
         )
         val mockBot = MockBot(mockBotConfig)
@@ -46,8 +46,8 @@ class WsForwardIntegrationTest {
         delay(500)
 
         val clientConfig = OneBotConfig(
-            wsReverseEnable = true, wsReverseUseUniversal = true,
-            wsReverseUrl = "ws://127.0.0.1:6710",
+            wsForwardClientEnable = true, wsForwardClientUseUniversal = true,
+            wsForwardClientUrl = "ws://127.0.0.1:6710",
             selfId = 10001
         )
         val client = OneBotClient(clientConfig)
@@ -73,7 +73,7 @@ class WsForwardIntegrationTest {
     @Test
     fun testWsLifecycleConnectEvent() = runBlocking {
         val mockBotConfig = OneBotConfig(
-            wsEnable = true, wsHost = "127.0.0.1", wsPort = 6710,
+            wsForwardServerEnable = true, wsForwardServerHost = "127.0.0.1", wsForwardServerPort = 6710,
             selfId = 10001
         )
         val mockBot = MockBot(mockBotConfig)
@@ -82,8 +82,8 @@ class WsForwardIntegrationTest {
         delay(500)
 
         val clientConfig = OneBotConfig(
-            wsReverseEnable = true, wsReverseUseUniversal = true,
-            wsReverseUrl = "ws://127.0.0.1:6710",
+            wsForwardClientEnable = true, wsForwardClientUseUniversal = true,
+            wsForwardClientUrl = "ws://127.0.0.1:6710",
             selfId = 10001
         )
         val client = OneBotClient(clientConfig)
@@ -105,7 +105,7 @@ class WsForwardIntegrationTest {
     @Test
     fun testWsHeartbeatEvent() = runBlocking {
         val mockBotConfig = OneBotConfig(
-            wsEnable = true, wsHost = "127.0.0.1", wsPort = 6710,
+            wsForwardServerEnable = true, wsForwardServerHost = "127.0.0.1", wsForwardServerPort = 6710,
             heartbeatEnable = true, heartbeatInterval = 2000,
             selfId = 10001
         )
@@ -115,8 +115,8 @@ class WsForwardIntegrationTest {
         delay(500)
 
         val clientConfig = OneBotConfig(
-            wsReverseEnable = true, wsReverseUseUniversal = true,
-            wsReverseUrl = "ws://127.0.0.1:6710",
+            wsForwardClientEnable = true, wsForwardClientUseUniversal = true,
+            wsForwardClientUrl = "ws://127.0.0.1:6710",
             selfId = 10001
         )
         val client = OneBotClient(clientConfig)
@@ -138,7 +138,7 @@ class WsForwardIntegrationTest {
     @Test
     fun testWsGroupMessageRoundTrip() = runBlocking {
         val mockBotConfig = OneBotConfig(
-            wsEnable = true, wsHost = "127.0.0.1", wsPort = 6710,
+            wsForwardServerEnable = true, wsForwardServerHost = "127.0.0.1", wsForwardServerPort = 6710,
             selfId = 10001
         )
         val mockBot = MockBot(mockBotConfig)
@@ -150,8 +150,8 @@ class WsForwardIntegrationTest {
         delay(500)
 
         val clientConfig = OneBotConfig(
-            wsReverseEnable = true, wsReverseUseUniversal = true,
-            wsReverseUrl = "ws://127.0.0.1:6710",
+            wsForwardClientEnable = true, wsForwardClientUseUniversal = true,
+            wsForwardClientUrl = "ws://127.0.0.1:6710",
             selfId = 10001
         )
         val client = OneBotClient(clientConfig)

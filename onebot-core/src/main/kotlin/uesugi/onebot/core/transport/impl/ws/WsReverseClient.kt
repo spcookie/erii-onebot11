@@ -2,279 +2,316 @@ package uesugi.onebot.core.transport.impl.ws
 
 import io.ktor.client.*
 import io.ktor.client.plugins.websocket.*
+import io.ktor.client.request.*
+import io.ktor.http.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.serialization.json.Json
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import uesugi.onebot.core.config.OneBotConfig
+import uesugi.onebot.core.dispatch.ActionNotFoundException
+import uesugi.onebot.core.dispatch.DispatchException
 import uesugi.onebot.core.model.*
 import uesugi.onebot.core.parser.ActionParamParser
 import uesugi.onebot.core.parser.ActionResultParser
 import uesugi.onebot.core.parser.EventParser
-import uesugi.onebot.core.transport.ActionChannel
-import uesugi.onebot.core.transport.EventChannel
+import uesugi.onebot.core.transport.ActionServerChannel
+import uesugi.onebot.core.transport.EventPushChannel
 import uesugi.onebot.core.transport.JsonFactory
-import uesugi.onebot.core.util.EchoTracker
 import kotlin.time.Duration.Companion.milliseconds
 
-// ===== 共享辅助函数 =====
+// ===== 反向 WS 客户端（实现侧，OneBot 实现作为 WS 客户端连接 SDK 服务器）=====
 
-/** 通过 EchoTracker 发送 WS Action 请求并等待响应 */
-private suspend fun doCall(
-    session: WebSocketSession,
-    echoTracker: EchoTracker,
-    json: Json,
-    action: String,
-    params: JsonObject,
-    timeout: Long
-): ActionResponse {
-    val echo = echoTracker.generateEcho()
-    val deferred = echoTracker.register(echo, timeout)
-    val request = ActionRequest(action = action, params = params, echo = echo)
-    val requestJson = json.encodeToString(ActionRequest.serializer(), request)
-    session.outgoing.send(Frame.Text(requestJson))
-    return deferred.await()
-}
-
-/** 带自动重连的 WebSocket 连接循环 */
-private suspend fun connectWithRetry(
-    url: String,
-    reconnectInterval: Long,
-    scope: CoroutineScope,
-    client: HttpClient,
-    logger: Logger,
-    onConnected: (WebSocketSession) -> Unit = {},
-    onFrame: suspend WebSocketSession.(String) -> Unit
-) {
-    while (scope.isActive) {
-        try {
-            client.webSocket(url) {
-                onConnected(this)
-                logger.info("WS reverse connected to {}", url)
-                for (frame in incoming) {
-                    if (frame !is Frame.Text) continue
-                    onFrame(frame.readText())
-                }
-            }
-        } catch (e: Exception) {
-            logger.warn("WS reverse disconnected: {}", e.message)
-        }
-        delay(reconnectInterval.milliseconds)
-    }
-}
-
-/** 创建带异常处理器的 CoroutineScope */
-private fun createScope(logger: Logger): CoroutineScope {
-    val handler = CoroutineExceptionHandler { _, e ->
-        logger.error("Transport coroutine error", e)
-    }
-    return CoroutineScope(Dispatchers.IO + SupervisorJob() + handler)
-}
-
-// ===== 反向 WS API 客户端 =====
-
-class WsReverseApiClient(
+/**
+ * 反向 WS Action 客户端（实现侧）。
+ *
+ * OneBot 实现作为 WS 客户端，连接 SDK 的 WS 服务器，设置 X-Client-Role: API。
+ * 接收 SDK 发来的 Action 请求，通过 [actionHandler] 处理后返回响应。
+ * 断线自动重连。
+ */
+class WsReverseActionClient(
     private val config: OneBotConfig,
-    private val echoTracker: EchoTracker,
+    override val actionHandler: suspend (String, OneBotActionParams) -> OneBotActionResult,
     private val client: HttpClient = HttpClient { install(WebSockets) }
-) : ActionChannel {
+) : ActionServerChannel {
 
-    private val logger = LoggerFactory.getLogger(WsReverseApiClient::class.java)
+    private val logger = LoggerFactory.getLogger(WsReverseActionClient::class.java)
     private val json = JsonFactory.compact
-    private var session: WebSocketSession? = null
-    private var scope: CoroutineScope? = null
     private val paramParser = ActionParamParser(config.messageFormat)
     private val resultParser = ActionResultParser()
-    private val apiUrl: String = config.wsReverseApiUrl ?: config.wsReverseUrl
-    ?: error("wsReverseApiUrl or wsReverseUrl is required")
+    private val apiUrl: String = config.wsReverseClientApiUrl ?: config.wsReverseClientUrl
+    ?: error("wsReverseClientApiUrl or wsReverseClientUrl is required")
 
-    override suspend fun call(action: String, params: OneBotActionParams): OneBotActionResult {
-        val s = session ?: error("WebSocket not connected")
-        val jsonParams = paramParser.serialize(action, params)
-        val resp = doCall(s, echoTracker, json, action, jsonParams, config.timeout)
-        return resultParser.deserialize(action, resp.data)
-    }
+    private val scope = CoroutineScope(
+        Dispatchers.IO + SupervisorJob() + CoroutineExceptionHandler { _, e ->
+            logger.error("WsReverseActionClient coroutine error", e)
+        }
+    )
 
     override suspend fun start() {
-        scope = createScope(logger)
-        echoTracker.setScope(scope!!)
-        scope!!.launch {
-            connectWithRetry(
-                apiUrl, config.wsReverseReconnectInterval, scope!!, client, logger,
-                onConnected = { session = it },
-                onFrame = { text ->
-                    try {
-                        val resp = json.decodeFromString(ActionResponse.serializer(), text)
-                        resp.echo?.let { echoTracker.resolve(it, resp) }
-                    } catch (e: Exception) {
-                        logger.debug("Non API response on API channel: {}", e.message)
-                    }
-                }
-            )
+        scope.launch {
+            connectWithRetry(apiUrl, "API")
         }
     }
 
     override suspend fun stop() {
-        echoTracker.cancelAll()
-        session?.close()
-        scope?.cancel()
+        scope.cancel()
+    }
+
+    private suspend fun connectWithRetry(url: String, role: String) {
+        while (scope.isActive) {
+            try {
+                client.webSocket(url) {
+                    request {
+                        header("X-Client-Role", role)
+                        header("X-Self-ID", config.selfIdStr)
+                        config.authHeader?.let { header(HttpHeaders.Authorization, it) }
+                    }
+                    logger.info("WsReverseActionClient connected to {}", url)
+                    for (frame in incoming) {
+                        if (frame !is Frame.Text) continue
+                        val responseJson = try {
+                            val elem = json.parseToJsonElement(frame.readText())
+                            if (elem is JsonObject && elem.containsKey("action")) {
+                                val request = json.decodeFromJsonElement(ActionRequest.serializer(), elem)
+                                handleAction(request)
+                            } else {
+                                null
+                            }
+                        } catch (e: Exception) {
+                            logger.debug("Invalid action request frame: {}", e.message)
+                            null
+                        }
+                        if (responseJson != null) {
+                            outgoing.send(Frame.Text(responseJson))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warn("WsReverseActionClient disconnected: {}", e.message)
+            }
+            delay(config.wsReverseClientReconnectInterval.milliseconds)
+        }
+    }
+
+    private suspend fun handleAction(request: ActionRequest): String {
+        val actionResponse = try {
+            when (val result = actionHandler(request.action, paramParser.deserialize(request.action, request.params))) {
+                is AsyncActionResult -> ActionResponse.async(request.echo)
+                else -> {
+                    val data = resultParser.serialize(request.action, result)
+                    ActionResponse.ok(data, request.echo)
+                }
+            }
+        } catch (e: ActionNotFoundException) {
+            logger.debug("Action not found: {}", request.action)
+            ActionResponse.notFound(request.echo)
+        } catch (e: DispatchException) {
+            logger.warn("Dispatch error for action {}: retcode={}", request.action, e.retcode)
+            ActionResponse.failed(e.retcode, request.echo)
+        } catch (e: Exception) {
+            logger.warn("Failed to handle action {}", request.action, e)
+            ActionResponse.badRequest(request.echo)
+        }
+        return json.encodeToString(ActionResponse.serializer(), actionResponse)
     }
 }
 
-// ===== 反向 WS Event 客户端 =====
-
+/**
+ * 反向 WS Event 客户端（实现侧）。
+ *
+ * OneBot 实现作为 WS 客户端，连接 SDK 的 WS 服务器，设置 X-Client-Role: Event。
+ * 通过 [pushEvent] 向 SDK 推送事件。
+ * 断线自动重连。
+ */
 class WsReverseEventClient(
     private val config: OneBotConfig,
-    private val actionHandler: suspend (String, OneBotActionParams) -> OneBotActionResult,
     private val client: HttpClient = HttpClient { install(WebSockets) }
-) : EventChannel {
+) : EventPushChannel {
 
     private val logger = LoggerFactory.getLogger(WsReverseEventClient::class.java)
-    private val eventChannel = Channel<OneBotEvent>(CONFLATED)
-    private var scope: CoroutineScope? = null
     private val eventParser = EventParser(config.messageFormat)
-    private val eventUrl: String = config.wsReverseEventUrl ?: config.wsReverseUrl
-    ?: error("wsReverseEventUrl or wsReverseUrl is required")
     private val baseJson = JsonFactory.base
+    private val eventUrl: String = config.wsReverseClientEventUrl ?: config.wsReverseClientUrl
+    ?: error("wsReverseClientEventUrl or wsReverseClientUrl is required")
 
-    override val events: Flow<OneBotEvent> = eventChannel.receiveAsFlow()
+    private val scope = CoroutineScope(
+        Dispatchers.IO + SupervisorJob() + CoroutineExceptionHandler { _, e ->
+            logger.error("WsReverseEventClient coroutine error", e)
+        }
+    )
+
+    private var session: WebSocketSession? = null
+    private val sessionMutex = Mutex()
+
+    override suspend fun pushEvent(event: OneBotEvent) {
+        val s = sessionMutex.withLock { session } ?: run {
+            logger.warn("No active Event session, dropping event")
+            return
+        }
+        try {
+            val eventJson = baseJson.encodeToString(JsonObject.serializer(), eventParser.serialize(event))
+            s.outgoing.send(Frame.Text(eventJson))
+        } catch (e: Exception) {
+            logger.warn("Failed to push event", e)
+        }
+    }
 
     override suspend fun start() {
-        scope = createScope(logger)
-        scope!!.launch {
-            connectWithRetry(
-                eventUrl, config.wsReverseReconnectInterval, scope!!, client, logger,
-                onFrame = { text ->
-                    try {
-                        val event = eventParser.deserialize(text)
-                        event.quickOpHandler = QuickOpHandler { op ->
-                            try {
-                                val context =
-                                    baseJson.encodeToJsonElement(OneBotEvent.serializer(), event).jsonObject
-                                val operationJson =
-                                    baseJson.encodeToJsonElement(QuickOperation.serializer(), op).jsonObject
-                                val params = JsonObject(mapOf("context" to context, "operation" to operationJson))
-                                actionHandler(ActionName.HANDLE_QUICK_OPERATION, RawActionParams(params))
-                            } catch (e: Exception) {
-                                logger.error("Quick operation handler failed", e)
-                            }
-                        }
-                        eventChannel.send(event)
-                    } catch (e: Exception) {
-                        logger.debug("Failed to parse event: {}", e.message)
-                    }
-                }
-            )
+        scope.launch {
+            connectWithRetry(eventUrl, "Event")
         }
     }
 
     override suspend fun stop() {
-        eventChannel.close()
-        scope?.cancel()
+        sessionMutex.withLock { session = null }
+        scope.cancel()
+    }
+
+    private suspend fun connectWithRetry(url: String, role: String) {
+        while (scope.isActive) {
+            try {
+                client.webSocket(url) {
+                    request {
+                        header("X-Client-Role", role)
+                        header("X-Self-ID", config.selfIdStr)
+                        config.authHeader?.let { header(HttpHeaders.Authorization, it) }
+                    }
+                    sessionMutex.withLock { session = this }
+                    logger.info("WsReverseEventClient connected to {}", url)
+                    for (frame in incoming) {
+                        if (frame is Frame.Close) break
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warn("WsReverseEventClient disconnected: {}", e.message)
+            } finally {
+                sessionMutex.withLock { session = null }
+            }
+            delay(config.wsReverseClientReconnectInterval.milliseconds)
+        }
     }
 }
 
-// ===== 反向 WS Universal 客户端 =====
-
+/**
+ * 反向 WS Universal 客户端（实现侧）。
+ *
+ * OneBot 实现作为 WS 客户端，连接 SDK 的 WS 服务器，设置 X-Client-Role: Universal。
+ * 单连接同时处理 Action 接收/响应 和 Event 推送。
+ * 断线自动重连。
+ */
 class WsReverseUniversalClient(
     private val config: OneBotConfig,
-    private val echoTracker: EchoTracker,
+    override val actionHandler: suspend (String, OneBotActionParams) -> OneBotActionResult,
     private val client: HttpClient = HttpClient { install(WebSockets) }
-) : ActionChannel, EventChannel {
+) : ActionServerChannel, EventPushChannel {
 
     private val logger = LoggerFactory.getLogger(WsReverseUniversalClient::class.java)
     private val json = JsonFactory.compact
     private val baseJson = JsonFactory.base
-    private val eventChannel = Channel<OneBotEvent>(CONFLATED)
-    private var session: WebSocketSession? = null
-    private var scope: CoroutineScope? = null
     private val paramParser = ActionParamParser(config.messageFormat)
     private val resultParser = ActionResultParser()
     private val eventParser = EventParser(config.messageFormat)
-    private val url: String = config.wsReverseUrl
-        ?: error("wsReverseUrl is required for universal client")
+    private val url: String = config.wsReverseClientUrl
+        ?: error("wsReverseClientUrl is required for Universal client")
 
-    override val events: Flow<OneBotEvent> = eventChannel.receiveAsFlow()
+    private val scope = CoroutineScope(
+        Dispatchers.IO + SupervisorJob() + CoroutineExceptionHandler { _, e ->
+            logger.error("WsReverseUniversalClient coroutine error", e)
+        }
+    )
 
-    override suspend fun call(action: String, params: OneBotActionParams): OneBotActionResult {
-        val s = session ?: error("WebSocket not connected")
-        val jsonParams = paramParser.serialize(action, params)
-        val resp = doCall(s, echoTracker, json, action, jsonParams, config.timeout)
-        return resultParser.deserialize(action, resp.data)
+    private var session: WebSocketSession? = null
+    private val sessionMutex = Mutex()
+
+    // ===== ActionServerChannel =====
+
+    override suspend fun pushEvent(event: OneBotEvent) {
+        val s = sessionMutex.withLock { session } ?: run {
+            logger.warn("No active Universal session, dropping event")
+            return
+        }
+        try {
+            val eventJson = baseJson.encodeToString(JsonObject.serializer(), eventParser.serialize(event))
+            s.outgoing.send(Frame.Text(eventJson))
+        } catch (e: Exception) {
+            logger.warn("Failed to push event", e)
+        }
     }
 
     override suspend fun start() {
-        scope = createScope(logger)
-        echoTracker.setScope(scope!!)
-        scope!!.launch {
-            connectWithRetry(
-                url, config.wsReverseReconnectInterval, scope!!, client, logger,
-                onConnected = { session = it },
-                onFrame = { text ->
-                    try {
-                        val elem = json.parseToJsonElement(text)
-                        if (elem is JsonObject) {
-                            when {
-                                elem.containsKey("echo") && elem.containsKey("retcode") -> {
-                                    val resp = json.decodeFromJsonElement(ActionResponse.serializer(), elem)
-                                    if (resp.echo != null) {
-                                        echoTracker.resolve(resp.echo, resp)
-                                    } else {
-                                        logger.warn("Received response without echo, discarding")
-                                    }
-                                }
-
-                                elem.containsKey("post_type") -> {
-                                    val event = eventParser.deserialize(text)
-                                    event.quickOpHandler = QuickOpHandler { op ->
-                                        try {
-                                            val context =
-                                                baseJson.encodeToJsonElement(
-                                                    OneBotEvent.serializer(),
-                                                    event
-                                                ).jsonObject
-                                            val operationJson =
-                                                baseJson.encodeToJsonElement(
-                                                    QuickOperation.serializer(),
-                                                    op
-                                                ).jsonObject
-                                            val params = JsonObject(
-                                                mapOf(
-                                                    "context" to context,
-                                                    "operation" to operationJson
-                                                )
-                                            )
-                                            this@WsReverseUniversalClient.call(
-                                                ActionName.HANDLE_QUICK_OPERATION,
-                                                RawActionParams(params)
-                                            )
-                                        } catch (e: Exception) {
-                                            logger.error("Quick operation handler failed", e)
-                                        }
-                                    }
-                                    eventChannel.send(event)
-                                }
-                            }
-                        }
-                    } catch (e: Exception) {
-                        logger.error("Failed to process frame", e)
-                    }
-                }
-            )
+        scope.launch {
+            connectWithRetry(url, "Universal")
         }
     }
 
     override suspend fun stop() {
-        echoTracker.cancelAll()
-        eventChannel.close()
-        session?.close()
-        scope?.cancel()
+        sessionMutex.withLock { session = null }
+        scope.cancel()
+    }
+
+    private suspend fun connectWithRetry(url: String, role: String) {
+        while (scope.isActive) {
+            try {
+                client.webSocket(url) {
+                    request {
+                        header("X-Client-Role", role)
+                        header("X-Self-ID", config.selfIdStr)
+                        config.authHeader?.let { header(HttpHeaders.Authorization, it) }
+                    }
+                    sessionMutex.withLock { session = this }
+                    logger.info("WsReverseUniversalClient connected to {}", url)
+                    for (frame in incoming) {
+                        if (frame !is Frame.Text) continue
+                        val text = frame.readText()
+                        val responseJson = try {
+                            val elem = json.parseToJsonElement(text)
+                            if (elem is JsonObject && elem.containsKey("action")) {
+                                val request = json.decodeFromJsonElement(ActionRequest.serializer(), elem)
+                                handleAction(request)
+                            } else {
+                                null
+                            }
+                        } catch (e: Exception) {
+                            logger.debug("Invalid universal frame: {}", e.message)
+                            null
+                        }
+                        if (responseJson != null) {
+                            outgoing.send(Frame.Text(responseJson))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warn("WsReverseUniversalClient disconnected: {}", e.message)
+            } finally {
+                sessionMutex.withLock { session = null }
+            }
+            delay(config.wsReverseClientReconnectInterval.milliseconds)
+        }
+    }
+
+    private suspend fun handleAction(request: ActionRequest): String {
+        val actionResponse = try {
+            val result = actionHandler(request.action, paramParser.deserialize(request.action, request.params))
+            when (result) {
+                is AsyncActionResult -> ActionResponse.async(request.echo)
+                else -> {
+                    val data = resultParser.serialize(request.action, result)
+                    ActionResponse.ok(data, request.echo)
+                }
+            }
+        } catch (e: ActionNotFoundException) {
+            logger.debug("Action not found: {}", request.action)
+            ActionResponse.notFound(request.echo)
+        } catch (e: DispatchException) {
+            logger.warn("Dispatch error for action {}: retcode={}", request.action, e.retcode)
+            ActionResponse.failed(e.retcode, request.echo)
+        } catch (e: Exception) {
+            logger.warn("Failed to handle action {}", request.action, e)
+            ActionResponse.badRequest(request.echo)
+        }
+        return json.encodeToString(ActionResponse.serializer(), actionResponse)
     }
 }

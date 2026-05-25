@@ -21,20 +21,20 @@ data class OneBotConfig(
     val httpPostPort: Int = 8080,
     val httpPostTimeout: Long = 30_000L,
 
-    // ===== 正向 WebSocket 模式 =====
-    // OneBot 作为 WebSocket 服务端，等待客户端连接
-    val wsEnable: Boolean = false,
-    val wsHost: String = "0.0.0.0",
-    val wsPort: Int = 6700,
+    // ===== 正向 WebSocket 服务端（实现侧）=====
+    // OneBot 实现作为 WebSocket 服务端，等待 SDK 客户端连接
+    val wsForwardServerEnable: Boolean = false,
+    val wsForwardServerHost: String = "0.0.0.0",
+    val wsForwardServerPort: Int = 6700,
 
-    // ===== 反向 WebSocket 模式 =====
-    // OneBot 作为 WebSocket 客户端，主动连接配置的 URL
-    val wsReverseEnable: Boolean = false,
-    val wsReverseUrl: String? = null,
-    val wsReverseApiUrl: String? = null,
-    val wsReverseEventUrl: String? = null,
-    val wsReverseUseUniversal: Boolean = false,
-    val wsReverseReconnectInterval: Long = 3_000L,
+    // ===== 正向 WebSocket 客户端（SDK 侧）=====
+    // SDK 作为 WebSocket 客户端，主动连接 OneBot 实现的 WS 服务器
+    val wsForwardClientEnable: Boolean = false,
+    val wsForwardClientUrl: String? = null,
+    val wsForwardClientApiUrl: String? = null,
+    val wsForwardClientEventUrl: String? = null,
+    val wsForwardClientUseUniversal: Boolean = false,
+    val wsForwardClientReconnectInterval: Long = 3_000L,
 
     // ===== 反向 WebSocket 服务端（SDK 侧）=====
     // SDK 作为 WebSocket 服务端，接受 OneBot 实现连接

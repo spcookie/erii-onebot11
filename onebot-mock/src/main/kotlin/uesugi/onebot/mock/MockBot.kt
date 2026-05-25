@@ -15,7 +15,7 @@ import uesugi.onebot.mock.storage.MockStorage
 class MockBot(
     private val config: OneBotConfig = OneBotConfig(
         httpEnable = true, httpHost = "127.0.0.1", httpPort = 5700,
-        wsEnable = true, wsHost = "127.0.0.1", wsPort = 6700,
+        wsForwardServerEnable = true, wsForwardServerHost = "127.0.0.1", wsForwardServerPort = 6700,
         selfId = 10001, appName = "mock-bot-server"
     ),
     val storage: MockStorage = InMemoryStorage(selfId = 10001)

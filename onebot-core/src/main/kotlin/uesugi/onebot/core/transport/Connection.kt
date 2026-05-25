@@ -22,12 +22,13 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * **SDK 端（客户端）模式：**
  * - HTTP：HttpActionClient（Action）+ 可选的 HttpEventServer（Event 接收）
- * - 正向 WS：WsReverseApiClient（Action）+ WsReverseEventClient（Event）
- * - 反向 WS Universal：WsReverseUniversalClient（Action + Event 单一连接）
+ * - 正向 WS：WsForwardApiClient（Action）+ WsForwardEventClient（Event）
+ * - 正向 WS Universal：WsForwardUniversalClient（Action + Event 单一连接）
  *
  * **服务端（实现）模式：**
  * - HTTP：HttpActionServer（Action）+ 可选的 HttpEventClient（Event 推送）
  * - 正向 WS：WsForwardServer（Event 推送 + 内置 Action 处理）
+ * - 反向 WS：WsReverseActionClient / WsReverseEventClient / WsReverseUniversalClient
  */
 class Connection(private val config: OneBotConfig) {
 
@@ -58,18 +59,18 @@ class Connection(private val config: OneBotConfig) {
             eventChannel = HttpEventServer(config)
         }
 
-        if (config.wsReverseEnable) {
-            if (config.wsReverseUseUniversal) {
-                val universal = WsReverseUniversalClient(config, echoTracker)
+        if (config.wsForwardClientEnable) {
+            if (config.wsForwardClientUseUniversal) {
+                val universal = WsForwardUniversalClient(config, echoTracker)
                 actionClient = universal
                 eventChannel = universal
             } else {
-                val apiClient = WsReverseApiClient(config, echoTracker)
+                val apiClient = WsForwardApiClient(config, echoTracker)
                 actionClient = apiClient
-                val eventClient = WsReverseEventClient(config, actionHandler = { action, params ->
+                val eventClient = WsForwardEventClient(config, actionHandler = { action, params ->
                     apiClient.call(action, params)
                 })
-                if (config.wsReverseEventUrl != null || config.wsReverseUrl != null) {
+                if (config.wsForwardClientEventUrl != null || config.wsForwardClientUrl != null) {
                     eventChannel = eventClient
                 }
             }
@@ -97,7 +98,7 @@ class Connection(private val config: OneBotConfig) {
             eventPushChannel = HttpEventClient(config)
         }
 
-        if (config.wsEnable) {
+        if (config.wsForwardServerEnable) {
             eventPushChannel = WsForwardServer(config, actionHandler, onConnect = {
                 pushLifecycleEvent("connect")
             })
@@ -106,15 +107,15 @@ class Connection(private val config: OneBotConfig) {
         // 反向 WS 客户端（实现侧，OneBot 实现作为 WS 客户端连接 SDK 服务器）
         if (config.wsReverseClientEnable) {
             if (config.wsReverseClientUseUniversal) {
-                val universal = ReverseWsUniversalClient(config, actionHandler)
+                val universal = WsReverseUniversalClient(config, actionHandler)
                 actionServer = universal
                 eventPushChannel = universal
             } else {
                 if (config.wsReverseClientApiUrl != null || config.wsReverseClientUrl != null) {
-                    actionServer = ReverseWsActionClient(config, actionHandler)
+                    actionServer = WsReverseActionClient(config, actionHandler)
                 }
                 if (config.wsReverseClientEventUrl != null || config.wsReverseClientUrl != null) {
-                    eventPushChannel = ReverseWsEventClient(config)
+                    eventPushChannel = WsReverseEventClient(config)
                 }
             }
         }
