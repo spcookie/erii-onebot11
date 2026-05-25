@@ -14,7 +14,7 @@ dependencyResolutionManagement {
 rootProject.name = "erii-onebot11"
 
 include(":kotlin:onebot-core")
-include(":kotlin:lib-onebot")
+include(":kotlin:onebot-lib")
 include(":kotlin:onebot-sdk")
 include(":kotlin:onebot-app")
-include(":kotlin:mock-bot-server")
+include(":kotlin:onebot-mock")
