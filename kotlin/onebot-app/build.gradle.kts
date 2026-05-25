@@ -10,6 +10,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.logback.classic)
     implementation(libs.kotlin.logging)
+
+    testImplementation(project(":kotlin:mock-bot-server"))
+    testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 application {

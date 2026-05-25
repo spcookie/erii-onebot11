@@ -1,8 +1,0 @@
-reverse_ws:
-  url: "ws://127.0.0.1:6700/"
-  use_universal: true
-
-access_token: ""
-secret: ""
-timeout: 30000
-self_id: 10001

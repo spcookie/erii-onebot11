@@ -4,7 +4,7 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":kotlin:lib-onebot"))
+    api(project(":kotlin:onebot-core"))
 
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.ktor.serialization.kotlinx.json)

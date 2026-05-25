@@ -1,54 +1,87 @@
 package uesugi.onebot.app
 
-import kotlinx.coroutines.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
-import uesugi.onebot.app.handlers.MessageHandlers
-import uesugi.onebot.app.handlers.NoticeHandlers
-import uesugi.onebot.lib.connection.OneBotConfig
-import uesugi.onebot.sdk.OneBot
+import uesugi.onebot.core.config.OneBotConfig
+import uesugi.onebot.core.pipeline.LoggingMiddleware
+import uesugi.onebot.sdk.client.OneBotClient
+import uesugi.onebot.sdk.client.api.sendGroupMsg
+import uesugi.onebot.sdk.client.api.sendPrivateMsg
+import uesugi.onebot.sdk.client.onGroupMessage
+import uesugi.onebot.sdk.client.onNotice
+import uesugi.onebot.sdk.client.onPrivateMessage
+import uesugi.onebot.sdk.message.buildMessage
 
 /**
- * OneBot 示例应用入口。
+ * OneBot SDK Demo 应用。
  *
- * 默认使用反向 WebSocket 模式连接到 OneBot 实现端（如 NapCat、go-cqhttp）。
+ * 演示如何使用 SDK 连接 OneBot 实现，注册事件处理器，调用 API。
  */
-fun main() {
-    val logger = LoggerFactory.getLogger("onebot-app")
+object App {
+    private val logger = LoggerFactory.getLogger(App::class.java)
 
-    // 配置：反向 WS 模式
-    val config = OneBotConfig(
-        wsReverseEnable = true,
-        wsReverseUrl = "ws://127.0.0.1:8080/ws",
-        wsReverseUseUniversal = true,
-        accessToken = null,
-        selfId = 0,
-        appName = "onebot-app",
-        appVersion = "1.0.0",
-    )
+    @JvmStatic
+    fun main(args: Array<String>) = runBlocking {
+        val config = OneBotConfig(
+            wsReverseEnable = true,
+            wsReverseUrl = System.getenv("ONEBOT_WS_URL") ?: "ws://127.0.0.1:6700",
+            wsReverseUseUniversal = true,
+            accessToken = System.getenv("ONEBOT_TOKEN"),
+            selfId = System.getenv("ONEBOT_SELF_ID")?.toLongOrNull() ?: 0
+        )
 
-    val bot = OneBot(config)
+        val client = OneBotClient(config)
 
-    // 注册消息处理器
-    MessageHandlers(bot).register()
+        client.use(LoggingMiddleware("onebot-app"))
 
-    // 注册通知处理器
-    NoticeHandlers(bot).register()
+        client.onPrivateMessage { event ->
+            logger.info("收到私聊: user={}, message={}", event.userId, event.rawMessage)
 
-    // 启动
-    runBlocking {
-        bot.start()
-        logger.info("Bot is running, press Ctrl+C to stop")
+            if (event.rawMessage == "/ping") {
+                client.sendPrivateMsg(event.userId, buildMessage { text("pong!") })
+            }
+        }
 
-        // 等待停止信号
+        client.onGroupMessage { event ->
+            logger.info(
+                "收到群消息: group={}, user={}, message={}",
+                event.groupId, event.userId, event.rawMessage
+            )
+
+            when {
+                event.rawMessage == "/ping" -> {
+                    client.sendGroupMsg(event.groupId, buildMessage {
+                        reply(event.messageId.toLong())
+                        text("pong!")
+                    })
+                }
+
+                event.rawMessage.startsWith("/echo ") -> {
+                    val content = event.rawMessage.removePrefix("/echo ")
+                    client.sendGroupMsg(event.groupId, buildMessage { text(content) })
+                }
+            }
+        }
+
+        client.onNotice { event ->
+            logger.info("收到通知: noticeType={}", event.noticeType)
+        }
+
+        client.start()
+        logger.info("OneBot App 已启动，按 Ctrl+C 退出")
+
+        // 等待退出信号
         Runtime.getRuntime().addShutdownHook(Thread {
             runBlocking {
-                logger.info("Shutting down...")
-                bot.stop()
+                logger.info("正在关闭...")
+                client.stop()
             }
         })
 
         // 保持运行
-        while (true) {
+        while (isActive) {
             delay(1000)
         }
     }
