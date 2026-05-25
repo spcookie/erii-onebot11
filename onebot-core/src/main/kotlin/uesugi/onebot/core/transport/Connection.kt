@@ -10,10 +10,7 @@ import uesugi.onebot.core.transport.impl.http.HttpActionClient
 import uesugi.onebot.core.transport.impl.http.HttpActionServer
 import uesugi.onebot.core.transport.impl.http.HttpEventClient
 import uesugi.onebot.core.transport.impl.http.HttpEventServer
-import uesugi.onebot.core.transport.impl.ws.WsForwardServer
-import uesugi.onebot.core.transport.impl.ws.WsReverseApiClient
-import uesugi.onebot.core.transport.impl.ws.WsReverseEventClient
-import uesugi.onebot.core.transport.impl.ws.WsReverseUniversalClient
+import uesugi.onebot.core.transport.impl.ws.*
 import uesugi.onebot.core.util.EchoTracker
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -77,6 +74,13 @@ class Connection(private val config: OneBotConfig) {
                 }
             }
         }
+
+        // 反向 WS 服务端（SDK 作为 WS 服务器，OneBot 实现连接过来）
+        if (config.wsReverseServerEnable) {
+            val server = WsReverseServer(config, echoTracker)
+            if (actionClient == null) actionClient = server
+            if (eventChannel == null) eventChannel = server
+        }
         initialized = true
     }
 
@@ -97,6 +101,22 @@ class Connection(private val config: OneBotConfig) {
             eventPushChannel = WsForwardServer(config, actionHandler, onConnect = {
                 pushLifecycleEvent("connect")
             })
+        }
+
+        // 反向 WS 客户端（实现侧，OneBot 实现作为 WS 客户端连接 SDK 服务器）
+        if (config.wsReverseClientEnable) {
+            if (config.wsReverseClientUseUniversal) {
+                val universal = ReverseWsUniversalClient(config, actionHandler)
+                actionServer = universal
+                eventPushChannel = universal
+            } else {
+                if (config.wsReverseClientApiUrl != null || config.wsReverseClientUrl != null) {
+                    actionServer = ReverseWsActionClient(config, actionHandler)
+                }
+                if (config.wsReverseClientEventUrl != null || config.wsReverseClientUrl != null) {
+                    eventPushChannel = ReverseWsEventClient(config)
+                }
+            }
         }
         initialized = true
     }

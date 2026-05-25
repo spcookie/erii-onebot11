@@ -36,6 +36,21 @@ data class OneBotConfig(
     val wsReverseUseUniversal: Boolean = false,
     val wsReverseReconnectInterval: Long = 3_000L,
 
+    // ===== 反向 WebSocket 服务端（SDK 侧）=====
+    // SDK 作为 WebSocket 服务端，接受 OneBot 实现连接
+    val wsReverseServerEnable: Boolean = false,
+    val wsReverseServerHost: String = "0.0.0.0",
+    val wsReverseServerPort: Int = 9080,
+
+    // ===== 反向 WebSocket 客户端（实现侧）=====
+    // OneBot 实现作为 WebSocket 客户端，主动连接 SDK 的 WS 服务器
+    val wsReverseClientEnable: Boolean = false,
+    val wsReverseClientUrl: String? = null,
+    val wsReverseClientApiUrl: String? = null,
+    val wsReverseClientEventUrl: String? = null,
+    val wsReverseClientUseUniversal: Boolean = false,
+    val wsReverseClientReconnectInterval: Long = 3_000L,
+
     // ===== 授权 =====
     val accessToken: String? = null,
     val secret: String? = null,
