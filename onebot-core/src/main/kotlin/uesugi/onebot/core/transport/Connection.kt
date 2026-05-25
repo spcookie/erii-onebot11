@@ -41,7 +41,11 @@ class Connection(private val config: OneBotConfig) {
     private var eventPushChannel: EventPushChannel? = null
     private val echoTracker = EchoTracker()
     private var initialized = false
-    private val serverScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val serverScope = CoroutineScope(
+        Dispatchers.IO + SupervisorJob() + CoroutineExceptionHandler { _, e ->
+            logger.error("Connection serverScope coroutine error", e)
+        }
+    )
     private var heartbeatJob: Job? = null
 
     // ===== SDK 端构建方法 =====
@@ -131,7 +135,11 @@ class Connection(private val config: OneBotConfig) {
         }
         if (eventPushChannel != null) {
             serverScope.launch {
-                pushLifecycleEvent("enable")
+                try {
+                    pushLifecycleEvent("enable")
+                } catch (e: Exception) {
+                    logger.error("Failed to push lifecycle enable event", e)
+                }
             }
             if (config.heartbeatEnable) {
                 heartbeatJob = serverScope.launch {

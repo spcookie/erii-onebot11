@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import uesugi.onebot.core.config.OneBotConfig
 import uesugi.onebot.core.model.*
@@ -48,7 +49,7 @@ private suspend fun connectWithRetry(
     reconnectInterval: Long,
     scope: CoroutineScope,
     client: HttpClient,
-    logger: org.slf4j.Logger,
+    logger: Logger,
     onConnected: (WebSocketSession) -> Unit = {},
     onFrame: suspend WebSocketSession.(String) -> Unit
 ) {
@@ -67,6 +68,14 @@ private suspend fun connectWithRetry(
         }
         delay(reconnectInterval.milliseconds)
     }
+}
+
+/** 创建带异常处理器的 CoroutineScope */
+private fun createScope(logger: Logger): CoroutineScope {
+    val handler = CoroutineExceptionHandler { _, e ->
+        logger.error("Transport coroutine error", e)
+    }
+    return CoroutineScope(Dispatchers.IO + SupervisorJob() + handler)
 }
 
 // ===== 反向 WS API 客户端 =====
@@ -94,7 +103,7 @@ class WsReverseApiClient(
     }
 
     override suspend fun start() {
-        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        scope = createScope(logger)
         echoTracker.setScope(scope!!)
         scope!!.launch {
             connectWithRetry(
@@ -138,7 +147,7 @@ class WsReverseEventClient(
     override val events: Flow<OneBotEvent> = eventChannel.receiveAsFlow()
 
     override suspend fun start() {
-        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        scope = createScope(logger)
         scope!!.launch {
             connectWithRetry(
                 eventUrl, config.wsReverseReconnectInterval, scope!!, client, logger,
@@ -146,10 +155,16 @@ class WsReverseEventClient(
                     try {
                         val event = eventParser.deserialize(text)
                         event.quickOpHandler = QuickOpHandler { op ->
-                            val context = baseJson.encodeToJsonElement(OneBotEvent.serializer(), event).jsonObject
-                            val operationJson = baseJson.encodeToJsonElement(QuickOperation.serializer(), op).jsonObject
-                            val params = JsonObject(mapOf("context" to context, "operation" to operationJson))
-                            actionHandler(ActionName.HANDLE_QUICK_OPERATION, RawActionParams(params))
+                            try {
+                                val context =
+                                    baseJson.encodeToJsonElement(OneBotEvent.serializer(), event).jsonObject
+                                val operationJson =
+                                    baseJson.encodeToJsonElement(QuickOperation.serializer(), op).jsonObject
+                                val params = JsonObject(mapOf("context" to context, "operation" to operationJson))
+                                actionHandler(ActionName.HANDLE_QUICK_OPERATION, RawActionParams(params))
+                            } catch (e: Exception) {
+                                logger.error("Quick operation handler failed", e)
+                            }
                         }
                         eventChannel.send(event)
                     } catch (e: Exception) {
@@ -196,41 +211,60 @@ class WsReverseUniversalClient(
     }
 
     override suspend fun start() {
-        scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        scope = createScope(logger)
         echoTracker.setScope(scope!!)
         scope!!.launch {
             connectWithRetry(
                 url, config.wsReverseReconnectInterval, scope!!, client, logger,
                 onConnected = { session = it },
                 onFrame = { text ->
-                    val elem = json.parseToJsonElement(text)
-                    if (elem is JsonObject) {
-                        when {
-                            elem.containsKey("echo") && elem.containsKey("retcode") -> {
-                                val resp = json.decodeFromJsonElement(ActionResponse.serializer(), elem)
-                                if (resp.echo != null) {
-                                    echoTracker.resolve(resp.echo, resp)
-                                } else {
-                                    logger.warn("Received response without echo, discarding")
+                    try {
+                        val elem = json.parseToJsonElement(text)
+                        if (elem is JsonObject) {
+                            when {
+                                elem.containsKey("echo") && elem.containsKey("retcode") -> {
+                                    val resp = json.decodeFromJsonElement(ActionResponse.serializer(), elem)
+                                    if (resp.echo != null) {
+                                        echoTracker.resolve(resp.echo, resp)
+                                    } else {
+                                        logger.warn("Received response without echo, discarding")
+                                    }
                                 }
-                            }
 
-                            elem.containsKey("post_type") -> {
-                                val event = eventParser.deserialize(text)
-                                event.quickOpHandler = QuickOpHandler { op ->
-                                    val context =
-                                        baseJson.encodeToJsonElement(OneBotEvent.serializer(), event).jsonObject
-                                    val operationJson =
-                                        baseJson.encodeToJsonElement(QuickOperation.serializer(), op).jsonObject
-                                    val params = JsonObject(mapOf("context" to context, "operation" to operationJson))
-                                    this@WsReverseUniversalClient.call(
-                                        ActionName.HANDLE_QUICK_OPERATION,
-                                        RawActionParams(params)
-                                    )
+                                elem.containsKey("post_type") -> {
+                                    val event = eventParser.deserialize(text)
+                                    event.quickOpHandler = QuickOpHandler { op ->
+                                        try {
+                                            val context =
+                                                baseJson.encodeToJsonElement(
+                                                    OneBotEvent.serializer(),
+                                                    event
+                                                ).jsonObject
+                                            val operationJson =
+                                                baseJson.encodeToJsonElement(
+                                                    QuickOperation.serializer(),
+                                                    op
+                                                ).jsonObject
+                                            val params = JsonObject(
+                                                mapOf(
+                                                    "context" to context,
+                                                    "operation" to operationJson
+                                                )
+                                            )
+                                            this@WsReverseUniversalClient.call(
+                                                ActionName.HANDLE_QUICK_OPERATION,
+                                                RawActionParams(params)
+                                            )
+                                        } catch (e: Exception) {
+                                            logger.error("Quick operation handler failed", e)
+                                        }
+                                    }
+                                    eventChannel.send(event)
                                 }
-                                eventChannel.send(event)
                             }
                         }
+                    } catch (e: Exception) {
+                        logger.error("Failed to process frame", e)
                     }
                 }
             )
