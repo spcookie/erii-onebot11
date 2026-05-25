@@ -4,7 +4,7 @@ plugins {
 }
 
 dependencies {
-    api(project(":kotlin:onebot-core"))
+    api(project(":onebot-core"))
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.core)

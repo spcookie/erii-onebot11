@@ -1,6 +1,18 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.plugin.serialization)
+    `maven-publish`
+}
+
+group = "uesugi"
+version = "1.0.0"
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+        }
+    }
 }
 
 dependencies {

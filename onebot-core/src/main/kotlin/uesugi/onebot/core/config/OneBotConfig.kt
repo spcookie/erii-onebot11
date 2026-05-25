@@ -9,7 +9,7 @@ package uesugi.onebot.core.config
 data class OneBotConfig(
     // ===== HTTP 服务器模式 =====
     // OneBot 作为 HTTP 服务端，接收 API 调用
-    val httpEnable: Boolean = true,
+    val httpEnable: Boolean = false,
     val httpHost: String = "0.0.0.0",
     val httpPort: Int = 5700,
 
