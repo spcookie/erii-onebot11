@@ -23,7 +23,13 @@ class MockBot(
     private val server = OneBotServer(config)
     private val eventScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val dispatcher = MockActionDispatcher(storage) { event ->
-        eventScope.launch { server.pushEvent(event) }
+        eventScope.launch {
+            try {
+                server.pushEvent(event)
+            } catch (_: CancellationException) {
+                // 正常关闭流程，忽略
+            }
+        }
     }
 
     // ===== Lifecycle =====
@@ -34,8 +40,8 @@ class MockBot(
     }
 
     suspend fun stop() {
-        eventScope.cancel()
         server.stop()
+        eventScope.cancel()
     }
 
     suspend fun pushEvent(event: OneBotEvent) = server.pushEvent(event)

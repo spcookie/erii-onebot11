@@ -47,7 +47,7 @@ class HttpEventClient(
                 logger.warn("Event push returned HTTP {}", response.status.value)
             }
         } catch (e: Exception) {
-            logger.error("Failed to push event", e)
+            logger.warn("Failed to push event: {}", e.message)
         }
     }
 

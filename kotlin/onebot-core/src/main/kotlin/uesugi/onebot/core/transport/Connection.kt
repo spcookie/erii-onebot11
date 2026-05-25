@@ -157,9 +157,7 @@ class Connection(private val config: OneBotConfig) {
     /** 停止所有通道，取消所有待处理请求。服务端模式下自动发送 lifecycle disable 事件。 */
     suspend fun stop() {
         if (eventPushChannel != null) {
-            serverScope.launch {
-                pushLifecycleEvent("disable")
-            }
+            pushLifecycleEvent("disable")
         }
         heartbeatJob?.cancel()
         heartbeatJob = null
