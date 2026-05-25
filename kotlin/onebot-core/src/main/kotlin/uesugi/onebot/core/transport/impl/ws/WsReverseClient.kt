@@ -182,6 +182,7 @@ class WsReverseUniversalClient(
     private var scope: CoroutineScope? = null
     private val paramParser = ActionParamParser(config.messageFormat)
     private val resultParser = ActionResultParser()
+    private val eventParser = EventParser(config.messageFormat)
     private val url: String = config.wsReverseUrl
         ?: error("wsReverseUrl is required for universal client")
 
@@ -215,7 +216,7 @@ class WsReverseUniversalClient(
                             }
 
                             elem.containsKey("post_type") -> {
-                                val event = json.decodeFromJsonElement(OneBotEvent.serializer(), elem)
+                                val event = eventParser.deserialize(text)
                                 event.quickOpHandler = QuickOpHandler { op ->
                                     val context =
                                         baseJson.encodeToJsonElement(OneBotEvent.serializer(), event).jsonObject

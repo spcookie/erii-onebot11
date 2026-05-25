@@ -34,8 +34,6 @@ class WsForwardServer(
 ) : EventPushChannel {
 
     private val logger = LoggerFactory.getLogger(WsForwardServer::class.java)
-    private val json = JsonFactory.compact
-    private val eventJson = JsonFactory.base
     private var server: EmbeddedServer<*, *>? = null
     private val sessionMutex = Mutex()
     private val eventSessions = mutableSetOf<WebSocketSession>()
@@ -45,7 +43,7 @@ class WsForwardServer(
 
     override suspend fun pushEvent(event: OneBotEvent) {
         val serialized = eventParser.serialize(event)
-        val eventText = eventJson.encodeToString(JsonObject.serializer(), serialized)
+        val eventText = JsonFactory.base.encodeToString(JsonObject.serializer(), serialized)
         val sessions = sessionMutex.withLock { eventSessions.toSet() }
         val dead = mutableSetOf<WebSocketSession>()
         for (session in sessions) {
@@ -106,7 +104,7 @@ class WsForwardServer(
     private suspend fun DefaultWebSocketServerSession.processActionFrames() {
         for (frame in incoming) {
             if (frame !is Frame.Text) continue
-            val elem = json.parseToJsonElement(frame.readText())
+            val elem = JsonFactory.compact.parseToJsonElement(frame.readText())
             if (elem is JsonObject && elem.containsKey("action")) {
                 handleActionFrame(elem)
             }
@@ -114,7 +112,7 @@ class WsForwardServer(
     }
 
     private suspend fun DefaultWebSocketServerSession.handleActionFrame(elem: JsonObject) {
-        val request = json.decodeFromJsonElement(ActionRequest.serializer(), elem)
+        val request = JsonFactory.compact.decodeFromJsonElement(ActionRequest.serializer(), elem)
 
         val actionResponse = try {
             when (val result =
@@ -135,7 +133,8 @@ class WsForwardServer(
             logger.warn("Failed to handle action {}", request.action, e)
             ActionResponse.badRequest(request.echo)
         }
-        val respJson = json.encodeToString(ActionResponse.serializer(), actionResponse)
+        // 确保 status/retcode 始终存在
+        val respJson = JsonFactory.base.encodeToString(ActionResponse.serializer(), actionResponse)
         outgoing.send(Frame.Text(respJson))
     }
 

@@ -2,21 +2,19 @@ package uesugi.onebot.sdk.client
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.encodeToJsonElement
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.serializer
 import org.slf4j.LoggerFactory
 import uesugi.onebot.core.config.OneBotConfig
 import uesugi.onebot.core.dispatch.EventDispatcher
-import uesugi.onebot.core.model.*
+import uesugi.onebot.core.model.OneBotActionParams
+import uesugi.onebot.core.model.OneBotActionResult
+import uesugi.onebot.core.model.OneBotEvent
+import uesugi.onebot.core.model.RawActionParams
 import uesugi.onebot.core.pipeline.ActionHandler
 import uesugi.onebot.core.pipeline.EventHandler
 import uesugi.onebot.core.pipeline.Middleware
 import uesugi.onebot.core.pipeline.Pipeline
 import uesugi.onebot.core.transport.Connection
-import uesugi.onebot.core.transport.JsonFactory
 
 /**
  * OneBot 客户端统一入口。
@@ -72,35 +70,11 @@ class OneBotClient(config: OneBotConfig) {
 
     // ===== API 方法 =====
 
-    internal suspend fun call(action: String, params: JsonObject): ActionResponse {
-        val result = wrappedAction(action, RawActionParams(params))
-        return when (result) {
-            is AsyncActionResult -> ActionResponse.async()
-            is RawActionResult -> ActionResponse.ok(result.raw)
-            else -> ActionResponse.ok(JsonFactory.base.encodeToJsonElement(OneBotActionResult.serializer(), result))
-        }
+    suspend fun call(action: String, params: JsonObject): OneBotActionResult {
+        return wrappedAction(action, RawActionParams(params))
     }
 
-    internal suspend inline fun <reified T : Any> callWith(action: String, request: T): ActionResponse {
-        val params = JsonFactory.base.encodeToJsonElement(request).jsonObject
-        return call(action, params)
-    }
-
-    internal inline fun <reified T> parseResponse(resp: ActionResponse): T {
-        val element = when (val data = resp.data) {
-            is JsonNull -> JsonNull
-            else -> data
-        }
-        return JsonFactory.base.decodeFromJsonElement(serializer(), element)
-    }
-
-    internal inline fun <reified T> parseResponseList(resp: ActionResponse): List<T> {
-        val element = when (val data = resp.data) {
-            is JsonNull -> return emptyList()
-            else -> data
-        }
-        return JsonFactory.base.decodeFromJsonElement(serializer<List<T>>(), element)
+    suspend fun <T : OneBotActionParams> callWith(action: String, request: T): OneBotActionResult {
+        return wrappedAction(action, request)
     }
 }
-
-internal val emptyParams: JsonObject = JsonObject(emptyMap())

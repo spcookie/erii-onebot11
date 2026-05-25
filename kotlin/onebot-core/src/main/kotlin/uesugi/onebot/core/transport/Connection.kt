@@ -123,13 +123,16 @@ class Connection(private val config: OneBotConfig) {
     /** 启动所有通道（并行）。服务端模式下自动发送 lifecycle enable 事件并启动心跳。 */
     suspend fun start() {
         coroutineScope {
-            actionServer?.let { launch { it.start() } }
-            actionClient?.let { launch { it.start() } }
-            eventChannel?.let { launch { it.start() } }
-            eventPushChannel?.let { launch { it.start() } }
+            val started = mutableSetOf<Any>()
+            actionServer?.let { channel -> if (started.add(channel)) launch { channel.start() } }
+            actionClient?.let { channel -> if (started.add(channel)) launch { channel.start() } }
+            eventChannel?.let { channel -> if (started.add(channel)) launch { channel.start() } }
+            eventPushChannel?.let { channel -> if (started.add(channel)) launch { channel.start() } }
         }
         if (eventPushChannel != null) {
-            pushLifecycleEvent("enable")
+            serverScope.launch {
+                pushLifecycleEvent("enable")
+            }
             if (config.heartbeatEnable) {
                 heartbeatJob = serverScope.launch {
                     while (isActive) {
@@ -154,7 +157,9 @@ class Connection(private val config: OneBotConfig) {
     /** 停止所有通道，取消所有待处理请求。服务端模式下自动发送 lifecycle disable 事件。 */
     suspend fun stop() {
         if (eventPushChannel != null) {
-            pushLifecycleEvent("disable")
+            serverScope.launch {
+                pushLifecycleEvent("disable")
+            }
         }
         heartbeatJob?.cancel()
         heartbeatJob = null

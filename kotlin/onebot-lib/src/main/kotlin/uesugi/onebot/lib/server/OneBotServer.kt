@@ -17,7 +17,7 @@ import uesugi.onebot.core.pipeline.Middleware
 import uesugi.onebot.core.pipeline.Pipeline
 import uesugi.onebot.core.transport.Connection
 
-class OneBotServer(private val config: OneBotConfig) {
+class OneBotServer(config: OneBotConfig) {
     private val logger = LoggerFactory.getLogger(OneBotServer::class.java)
     private val connection = Connection(config)
     private val pipeline = Pipeline()
@@ -57,7 +57,7 @@ class OneBotServer(private val config: OneBotConfig) {
                     ActionResponse.ok(data)
                 }
             }
-        } catch (e: ActionNotFoundException) {
+        } catch (_: ActionNotFoundException) {
             ActionResponse.notFound()
         } catch (e: MiddlewareException) {
             ActionResponse.failed(e.retcode)

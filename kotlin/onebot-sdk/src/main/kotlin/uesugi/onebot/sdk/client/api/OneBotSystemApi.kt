@@ -1,29 +1,27 @@
 package uesugi.onebot.sdk.client.api
 
+import kotlinx.serialization.json.JsonObject
 import uesugi.onebot.core.model.*
 import uesugi.onebot.sdk.client.OneBotClient
-import uesugi.onebot.sdk.client.emptyParams
 
 // ===== 系统 API =====
 
 suspend fun OneBotClient.canSendImage(): Boolean {
-    val resp = call(ActionName.CAN_SEND_IMAGE, emptyParams)
-    return parseResponse<CanSendResult>(resp).yes
+    val result = call(ActionName.CAN_SEND_IMAGE, JsonObject(emptyMap()))
+    return (result as CanSendResult).yes
 }
 
 suspend fun OneBotClient.canSendRecord(): Boolean {
-    val resp = call(ActionName.CAN_SEND_RECORD, emptyParams)
-    return parseResponse<CanSendResult>(resp).yes
+    val result = call(ActionName.CAN_SEND_RECORD, JsonObject(emptyMap()))
+    return (result as CanSendResult).yes
 }
 
 suspend fun OneBotClient.getStatus(): StatusInfo {
-    val resp = call(ActionName.GET_STATUS, emptyParams)
-    return parseResponse(resp)
+    return call(ActionName.GET_STATUS, JsonObject(emptyMap())) as StatusInfo
 }
 
 suspend fun OneBotClient.getVersionInfo(): VersionInfo {
-    val resp = call(ActionName.GET_VERSION_INFO, emptyParams)
-    return parseResponse(resp)
+    return call(ActionName.GET_VERSION_INFO, JsonObject(emptyMap())) as VersionInfo
 }
 
 suspend fun OneBotClient.setRestart(delay: Long = 0) {
@@ -31,30 +29,25 @@ suspend fun OneBotClient.setRestart(delay: Long = 0) {
 }
 
 suspend fun OneBotClient.cleanCache() {
-    call(ActionName.CLEAN_CACHE, emptyParams)
+    call(ActionName.CLEAN_CACHE, JsonObject(emptyMap()))
 }
 
 suspend fun OneBotClient.getCookies(domain: String = ""): CookiesInfo {
-    val resp = callWith(ActionName.GET_COOKIES, GetCookiesRequest(domain))
-    return parseResponse(resp)
+    return callWith(ActionName.GET_COOKIES, GetCookiesRequest(domain)) as CookiesInfo
 }
 
 suspend fun OneBotClient.getCsrfToken(): CsrfTokenInfo {
-    val resp = call(ActionName.GET_CSRF_TOKEN, emptyParams)
-    return parseResponse(resp)
+    return call(ActionName.GET_CSRF_TOKEN, JsonObject(emptyMap())) as CsrfTokenInfo
 }
 
 suspend fun OneBotClient.getCredentials(domain: String = ""): CredentialsInfo {
-    val resp = callWith(ActionName.GET_CREDENTIALS, GetCredentialsRequest(domain))
-    return parseResponse(resp)
+    return callWith(ActionName.GET_CREDENTIALS, GetCredentialsRequest(domain)) as CredentialsInfo
 }
 
 suspend fun OneBotClient.getRecord(file: String, outFormat: String = "mp3"): FilePathInfo {
-    val resp = callWith(ActionName.GET_RECORD, GetRecordRequest(file, outFormat))
-    return parseResponse(resp)
+    return callWith(ActionName.GET_RECORD, GetRecordRequest(file, outFormat)) as FilePathInfo
 }
 
 suspend fun OneBotClient.getImage(file: String): FilePathInfo {
-    val resp = callWith(ActionName.GET_IMAGE, GetImageRequest(file))
-    return parseResponse(resp)
+    return callWith(ActionName.GET_IMAGE, GetImageRequest(file)) as FilePathInfo
 }

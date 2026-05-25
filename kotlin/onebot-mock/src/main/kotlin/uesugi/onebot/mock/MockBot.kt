@@ -1,5 +1,6 @@
 package uesugi.onebot.mock
 
+import kotlinx.coroutines.*
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
@@ -20,7 +21,10 @@ class MockBot(
     val storage: MockStorage = InMemoryStorage(selfId = 10001)
 ) {
     private val server = OneBotServer(config)
-    private val dispatcher = MockActionDispatcher(storage) { event -> server.pushEvent(event) }
+    private val eventScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val dispatcher = MockActionDispatcher(storage) { event ->
+        eventScope.launch { server.pushEvent(event) }
+    }
 
     // ===== Lifecycle =====
 
@@ -30,6 +34,7 @@ class MockBot(
     }
 
     suspend fun stop() {
+        eventScope.cancel()
         server.stop()
     }
 
