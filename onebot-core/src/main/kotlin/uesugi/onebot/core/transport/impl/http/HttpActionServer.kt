@@ -7,6 +7,7 @@ import io.ktor.server.netty.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -59,14 +60,30 @@ class HttpActionServer(
                         if (!config.accessToken.isNullOrBlank()) {
                             val receivedAuth = call.request.header("Authorization")
                             val queryToken = call.request.queryParameters["access_token"]
+                            val hasToken = receivedAuth != null || queryToken != null
+                            val tokenMatch = receivedAuth == config.authHeader || queryToken == config.accessToken
 
-                            if (receivedAuth != config.authHeader && queryToken != config.accessToken) {
-                                call.respond(HttpStatusCode.Unauthorized)
+                            if (!hasToken) {
+                                val body =
+                                    json.encodeToString(ActionResponse.serializer(), ActionResponse.unauthorized())
+                                call.respondText(body, ContentType.Application.Json, HttpStatusCode.Unauthorized)
+                                return@handle
+                            }
+                            if (!tokenMatch) {
+                                val body = json.encodeToString(ActionResponse.serializer(), ActionResponse.forbidden())
+                                call.respondText(body, ContentType.Application.Json, HttpStatusCode.Forbidden)
                                 return@handle
                             }
                         }
 
-                        val params = parseParams(call)
+                        val params = try {
+                            parseParams(call)
+                        } catch (e: Exception) {
+                            logger.debug("Failed to parse request body: {}", e.message)
+                            val body = json.encodeToString(ActionResponse.serializer(), ActionResponse.badRequest())
+                            call.respondText(body, ContentType.Application.Json, HttpStatusCode.BadRequest)
+                            return@handle
+                        }
                         if (params == null) {
                             call.respond(HttpStatusCode.NotAcceptable)
                             return@handle
@@ -85,14 +102,20 @@ class HttpActionServer(
                                     HttpStatusCode.OK to json.encodeToString(ActionResponse.serializer(), resp)
                                 }
                             }
-                        } catch (_: ActionNotFoundException) {
-                            logger.debug("Action not found: {}", action)
-                            val resp = ActionResponse.notFound()
-                            HttpStatusCode.NotFound to json.encodeToString(ActionResponse.serializer(), resp)
                         } catch (e: DispatchException) {
-                            logger.warn("Dispatch error for action {}: retcode={}", action, e.retcode)
-                            val resp = ActionResponse.failed(e.retcode)
-                            HttpStatusCode.BadRequest to json.encodeToString(ActionResponse.serializer(), resp)
+                            when (e) {
+                                is ActionNotFoundException -> {
+                                    logger.debug("Action not found: {}", action)
+                                    val resp = ActionResponse.notFound()
+                                    HttpStatusCode.NotFound to json.encodeToString(ActionResponse.serializer(), resp)
+                                }
+
+                                else -> {
+                                    logger.warn("Dispatch error for action {}: retcode={}", action, e.retcode)
+                                    val resp = ActionResponse.failed(e.retcode)
+                                    HttpStatusCode.BadRequest to json.encodeToString(ActionResponse.serializer(), resp)
+                                }
+                            }
                         } catch (e: Exception) {
                             logger.warn("Failed to handle action $action", e)
                             val resp = ActionResponse.badRequest()
@@ -103,7 +126,10 @@ class HttpActionServer(
                 }
             }
         }
+        val started = CompletableDeferred<Unit>()
+        server!!.monitor.subscribe(ApplicationStarted) { started.complete(Unit) }
         server!!.start(wait = false)
+        started.await()
         logger.info("HTTP Action server started on {}:{}", config.httpHost, config.httpPort)
     }
 

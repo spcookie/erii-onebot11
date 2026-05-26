@@ -2,6 +2,8 @@ package uesugi.onebot.core.transport.impl.ws
 
 import io.ktor.client.*
 import io.ktor.client.plugins.websocket.*
+import io.ktor.client.request.*
+import io.ktor.http.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -10,7 +12,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import uesugi.onebot.core.config.OneBotConfig
@@ -50,12 +51,13 @@ private suspend fun connectWithRetry(
     scope: CoroutineScope,
     client: HttpClient,
     logger: Logger,
+    request: HttpRequestBuilder.() -> Unit = {},
     onConnected: (WebSocketSession) -> Unit = {},
     onFrame: suspend WebSocketSession.(String) -> Unit
 ) {
     while (scope.isActive) {
         try {
-            client.webSocket(url) {
+            client.webSocket(url, request = request) {
                 onConnected(this)
                 logger.info("WS forward connected to {}", url)
                 for (frame in incoming) {
@@ -94,6 +96,7 @@ class WsForwardApiClient(
     private val resultParser = ActionResultParser()
     private val apiUrl: String = config.wsForwardClientApiUrl ?: config.wsForwardClientUrl
     ?: error("wsForwardClientApiUrl or wsForwardClientUrl is required")
+    private var ready = CompletableDeferred<Unit>()
 
     override suspend fun call(action: String, params: OneBotActionParams): OneBotActionResult {
         val s = session ?: error("WebSocket not connected")
@@ -108,10 +111,14 @@ class WsForwardApiClient(
         scope!!.launch {
             connectWithRetry(
                 apiUrl, config.wsForwardClientReconnectInterval, scope!!, client, logger,
-                onConnected = { session = it },
+                request = { config.authHeader?.let { header(HttpHeaders.Authorization, it) } },
+                onConnected = { session = it; ready.complete(Unit); ready = CompletableDeferred() },
                 onFrame = { text ->
                     try {
                         val resp = json.decodeFromString(ActionResponse.serializer(), text)
+                        if (resp.retcode != 0) {
+                            logger.warn("API call failed: retcode={}, echo={}", resp.retcode, resp.echo)
+                        }
                         resp.echo?.let { echoTracker.resolve(it, resp) }
                     } catch (e: Exception) {
                         logger.debug("Non API response on API channel: {}", e.message)
@@ -119,6 +126,7 @@ class WsForwardApiClient(
                 }
             )
         }
+        ready.await()
     }
 
     override suspend fun stop() {
@@ -143,6 +151,7 @@ class WsForwardEventClient(
     private val eventUrl: String = config.wsForwardClientEventUrl ?: config.wsForwardClientUrl
     ?: error("wsForwardClientEventUrl or wsForwardClientUrl is required")
     private val baseJson = JsonFactory.base
+    private var ready = CompletableDeferred<Unit>()
 
     override val events: Flow<OneBotEvent> = eventChannel.receiveAsFlow()
 
@@ -151,21 +160,12 @@ class WsForwardEventClient(
         scope!!.launch {
             connectWithRetry(
                 eventUrl, config.wsForwardClientReconnectInterval, scope!!, client, logger,
+                request = { config.authHeader?.let { header(HttpHeaders.Authorization, it) } },
+                onConnected = { ready.complete(Unit); ready = CompletableDeferred() },
                 onFrame = { text ->
                     try {
                         val event = eventParser.deserialize(text)
-                        event.quickOpHandler = QuickOpHandler { op ->
-                            try {
-                                val context =
-                                    baseJson.encodeToJsonElement(OneBotEvent.serializer(), event).jsonObject
-                                val operationJson =
-                                    baseJson.encodeToJsonElement(QuickOperation.serializer(), op).jsonObject
-                                val params = JsonObject(mapOf("context" to context, "operation" to operationJson))
-                                actionHandler(ActionName.HANDLE_QUICK_OPERATION, RawActionParams(params))
-                            } catch (e: Exception) {
-                                logger.error("Quick operation handler failed", e)
-                            }
-                        }
+                        event.quickOpHandler = createQuickOpHandler(event, baseJson, actionHandler, logger)
                         eventChannel.send(event)
                     } catch (e: Exception) {
                         logger.debug("Failed to parse event: {}", e.message)
@@ -173,6 +173,7 @@ class WsForwardEventClient(
                 }
             )
         }
+        ready.await()
     }
 
     override suspend fun stop() {
@@ -200,6 +201,7 @@ class WsForwardUniversalClient(
     private val eventParser = EventParser(config.messageFormat)
     private val url: String = config.wsForwardClientUrl
         ?: error("wsForwardClientUrl is required for universal client")
+    private var ready = CompletableDeferred<Unit>()
 
     override val events: Flow<OneBotEvent> = eventChannel.receiveAsFlow()
 
@@ -216,7 +218,8 @@ class WsForwardUniversalClient(
         scope!!.launch {
             connectWithRetry(
                 url, config.wsForwardClientReconnectInterval, scope!!, client, logger,
-                onConnected = { session = it },
+                request = { config.authHeader?.let { header(HttpHeaders.Authorization, it) } },
+                onConnected = { session = it; ready.complete(Unit); ready = CompletableDeferred() },
                 onFrame = { text ->
                     try {
                         val elem = json.parseToJsonElement(text)
@@ -224,6 +227,9 @@ class WsForwardUniversalClient(
                             when {
                                 elem.containsKey("echo") && elem.containsKey("retcode") -> {
                                     val resp = json.decodeFromJsonElement(ActionResponse.serializer(), elem)
+                                    if (resp.retcode != 0) {
+                                        logger.warn("API call failed: retcode={}, echo={}", resp.retcode, resp.echo)
+                                    }
                                     if (resp.echo != null) {
                                         echoTracker.resolve(resp.echo, resp)
                                     } else {
@@ -233,32 +239,11 @@ class WsForwardUniversalClient(
 
                                 elem.containsKey("post_type") -> {
                                     val event = eventParser.deserialize(text)
-                                    event.quickOpHandler = QuickOpHandler { op ->
-                                        try {
-                                            val context =
-                                                baseJson.encodeToJsonElement(
-                                                    OneBotEvent.serializer(),
-                                                    event
-                                                ).jsonObject
-                                            val operationJson =
-                                                baseJson.encodeToJsonElement(
-                                                    QuickOperation.serializer(),
-                                                    op
-                                                ).jsonObject
-                                            val params = JsonObject(
-                                                mapOf(
-                                                    "context" to context,
-                                                    "operation" to operationJson
-                                                )
-                                            )
-                                            this@WsForwardUniversalClient.call(
-                                                ActionName.HANDLE_QUICK_OPERATION,
-                                                RawActionParams(params)
-                                            )
-                                        } catch (e: Exception) {
-                                            logger.error("Quick operation handler failed", e)
-                                        }
-                                    }
+                                    event.quickOpHandler = createQuickOpHandler(
+                                        event, baseJson,
+                                        { action, params -> this@WsForwardUniversalClient.call(action, params) },
+                                        logger
+                                    )
                                     eventChannel.send(event)
                                 }
                             }
@@ -269,6 +254,7 @@ class WsForwardUniversalClient(
                 }
             )
         }
+        ready.await()
     }
 
     override suspend fun stop() {

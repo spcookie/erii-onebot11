@@ -6,13 +6,12 @@ import io.ktor.server.netty.*
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
 import uesugi.onebot.core.config.OneBotConfig
-import uesugi.onebot.core.dispatch.ActionNotFoundException
-import uesugi.onebot.core.dispatch.DispatchException
 import uesugi.onebot.core.model.*
 import uesugi.onebot.core.parser.ActionParamParser
 import uesugi.onebot.core.parser.ActionResultParser
@@ -68,7 +67,10 @@ class WsForwardServer(
                 webSocket("/event") { handleEventSession() }
             }
         }
+        val started = CompletableDeferred<Unit>()
+        server!!.monitor.subscribe(ApplicationStarted) { started.complete(Unit) }
         server!!.start(wait = false)
+        started.await()
         logger.info("WS Forward server started on ws://{}:{}", config.wsForwardServerHost, config.wsForwardServerPort)
     }
 
@@ -79,6 +81,7 @@ class WsForwardServer(
     }
 
     private suspend fun DefaultWebSocketServerSession.handleUniversalSession() {
+        if (!authenticateWs(config, logger)) return
         if (!tryAddEventSession(this)) {
             close(CloseReason(CloseReason.Codes.TRY_AGAIN_LATER, "Too many event sessions"))
             return
@@ -94,6 +97,7 @@ class WsForwardServer(
     }
 
     private suspend fun DefaultWebSocketServerSession.handleApiSession() {
+        if (!authenticateWs(config, logger)) return
         try {
             processActionFrames()
         } catch (e: Exception) {
@@ -113,32 +117,13 @@ class WsForwardServer(
 
     private suspend fun DefaultWebSocketServerSession.handleActionFrame(elem: JsonObject) {
         val request = JsonFactory.compact.decodeFromJsonElement(ActionRequest.serializer(), elem)
-
-        val actionResponse = try {
-            when (val result =
-                actionHandler(request.action, paramsParser.deserialize(request.action, request.params))) {
-                is AsyncActionResult -> ActionResponse.async(request.echo)
-                else -> {
-                    val data = resultParser.serialize(request.action, result)
-                    ActionResponse.ok(data, request.echo)
-                }
-            }
-        } catch (e: ActionNotFoundException) {
-            logger.debug("Action not found: {}", request.action)
-            ActionResponse.notFound(request.echo)
-        } catch (e: DispatchException) {
-            logger.warn("Dispatch error for action {}: retcode={}", request.action, e.retcode)
-            ActionResponse.failed(e.retcode, request.echo)
-        } catch (e: Exception) {
-            logger.warn("Failed to handle action {}", request.action, e)
-            ActionResponse.badRequest(request.echo)
-        }
-        // 确保 status/retcode 始终存在
+        val actionResponse = handleActionRequest(request, actionHandler, paramsParser, resultParser, logger)
         val respJson = JsonFactory.base.encodeToString(ActionResponse.serializer(), actionResponse)
         outgoing.send(Frame.Text(respJson))
     }
 
     private suspend fun DefaultWebSocketServerSession.handleEventSession() {
+        if (!authenticateWs(config, logger)) return
         if (!tryAddEventSession(this)) {
             close(CloseReason(CloseReason.Codes.TRY_AGAIN_LATER, "Too many event sessions"))
             return

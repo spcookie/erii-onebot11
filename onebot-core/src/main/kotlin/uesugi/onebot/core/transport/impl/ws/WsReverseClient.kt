@@ -11,8 +11,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
 import uesugi.onebot.core.config.OneBotConfig
-import uesugi.onebot.core.dispatch.ActionNotFoundException
-import uesugi.onebot.core.dispatch.DispatchException
 import uesugi.onebot.core.model.*
 import uesugi.onebot.core.parser.ActionParamParser
 import uesugi.onebot.core.parser.ActionResultParser
@@ -43,6 +41,7 @@ class WsReverseActionClient(
     private val resultParser = ActionResultParser()
     private val apiUrl: String = config.wsReverseClientApiUrl ?: config.wsReverseClientUrl
     ?: error("wsReverseClientApiUrl or wsReverseClientUrl is required")
+    private var ready = CompletableDeferred<Unit>()
 
     private val scope = CoroutineScope(
         Dispatchers.IO + SupervisorJob() + CoroutineExceptionHandler { _, e ->
@@ -54,6 +53,7 @@ class WsReverseActionClient(
         scope.launch {
             connectWithRetry(apiUrl, "API")
         }
+        ready.await()
     }
 
     override suspend fun stop() {
@@ -63,13 +63,14 @@ class WsReverseActionClient(
     private suspend fun connectWithRetry(url: String, role: String) {
         while (scope.isActive) {
             try {
-                client.webSocket(url) {
-                    request {
-                        header("X-Client-Role", role)
-                        header("X-Self-ID", config.selfIdStr)
-                        config.authHeader?.let { header(HttpHeaders.Authorization, it) }
-                    }
+                client.webSocket(url, request = {
+                    header("X-Client-Role", role)
+                    header("X-Self-ID", config.selfIdStr)
+                    config.authHeader?.let { header(HttpHeaders.Authorization, it) }
+                }) {
                     logger.info("WsReverseActionClient connected to {}", url)
+                    ready.complete(Unit)
+                    ready = CompletableDeferred()
                     for (frame in incoming) {
                         if (frame !is Frame.Text) continue
                         val responseJson = try {
@@ -97,24 +98,7 @@ class WsReverseActionClient(
     }
 
     private suspend fun handleAction(request: ActionRequest): String {
-        val actionResponse = try {
-            when (val result = actionHandler(request.action, paramParser.deserialize(request.action, request.params))) {
-                is AsyncActionResult -> ActionResponse.async(request.echo)
-                else -> {
-                    val data = resultParser.serialize(request.action, result)
-                    ActionResponse.ok(data, request.echo)
-                }
-            }
-        } catch (e: ActionNotFoundException) {
-            logger.debug("Action not found: {}", request.action)
-            ActionResponse.notFound(request.echo)
-        } catch (e: DispatchException) {
-            logger.warn("Dispatch error for action {}: retcode={}", request.action, e.retcode)
-            ActionResponse.failed(e.retcode, request.echo)
-        } catch (e: Exception) {
-            logger.warn("Failed to handle action {}", request.action, e)
-            ActionResponse.badRequest(request.echo)
-        }
+        val actionResponse = handleActionRequest(request, actionHandler, paramParser, resultParser, logger)
         return json.encodeToString(ActionResponse.serializer(), actionResponse)
     }
 }
@@ -136,6 +120,7 @@ class WsReverseEventClient(
     private val baseJson = JsonFactory.base
     private val eventUrl: String = config.wsReverseClientEventUrl ?: config.wsReverseClientUrl
     ?: error("wsReverseClientEventUrl or wsReverseClientUrl is required")
+    private var ready = CompletableDeferred<Unit>()
 
     private val scope = CoroutineScope(
         Dispatchers.IO + SupervisorJob() + CoroutineExceptionHandler { _, e ->
@@ -163,6 +148,7 @@ class WsReverseEventClient(
         scope.launch {
             connectWithRetry(eventUrl, "Event")
         }
+        ready.await()
     }
 
     override suspend fun stop() {
@@ -173,14 +159,15 @@ class WsReverseEventClient(
     private suspend fun connectWithRetry(url: String, role: String) {
         while (scope.isActive) {
             try {
-                client.webSocket(url) {
-                    request {
-                        header("X-Client-Role", role)
-                        header("X-Self-ID", config.selfIdStr)
-                        config.authHeader?.let { header(HttpHeaders.Authorization, it) }
-                    }
+                client.webSocket(url, request = {
+                    header("X-Client-Role", role)
+                    header("X-Self-ID", config.selfIdStr)
+                    config.authHeader?.let { header(HttpHeaders.Authorization, it) }
+                }) {
                     sessionMutex.withLock { session = this }
                     logger.info("WsReverseEventClient connected to {}", url)
+                    ready.complete(Unit)
+                    ready = CompletableDeferred()
                     for (frame in incoming) {
                         if (frame is Frame.Close) break
                     }
@@ -216,6 +203,7 @@ class WsReverseUniversalClient(
     private val eventParser = EventParser(config.messageFormat)
     private val url: String = config.wsReverseClientUrl
         ?: error("wsReverseClientUrl is required for Universal client")
+    private var ready = CompletableDeferred<Unit>()
 
     private val scope = CoroutineScope(
         Dispatchers.IO + SupervisorJob() + CoroutineExceptionHandler { _, e ->
@@ -245,6 +233,7 @@ class WsReverseUniversalClient(
         scope.launch {
             connectWithRetry(url, "Universal")
         }
+        ready.await()
     }
 
     override suspend fun stop() {
@@ -255,14 +244,15 @@ class WsReverseUniversalClient(
     private suspend fun connectWithRetry(url: String, role: String) {
         while (scope.isActive) {
             try {
-                client.webSocket(url) {
-                    request {
-                        header("X-Client-Role", role)
-                        header("X-Self-ID", config.selfIdStr)
-                        config.authHeader?.let { header(HttpHeaders.Authorization, it) }
-                    }
+                client.webSocket(url, request = {
+                    header("X-Client-Role", role)
+                    header("X-Self-ID", config.selfIdStr)
+                    config.authHeader?.let { header(HttpHeaders.Authorization, it) }
+                }) {
                     sessionMutex.withLock { session = this }
                     logger.info("WsReverseUniversalClient connected to {}", url)
+                    ready.complete(Unit)
+                    ready = CompletableDeferred()
                     for (frame in incoming) {
                         if (frame !is Frame.Text) continue
                         val text = frame.readText()
@@ -293,25 +283,7 @@ class WsReverseUniversalClient(
     }
 
     private suspend fun handleAction(request: ActionRequest): String {
-        val actionResponse = try {
-            val result = actionHandler(request.action, paramParser.deserialize(request.action, request.params))
-            when (result) {
-                is AsyncActionResult -> ActionResponse.async(request.echo)
-                else -> {
-                    val data = resultParser.serialize(request.action, result)
-                    ActionResponse.ok(data, request.echo)
-                }
-            }
-        } catch (e: ActionNotFoundException) {
-            logger.debug("Action not found: {}", request.action)
-            ActionResponse.notFound(request.echo)
-        } catch (e: DispatchException) {
-            logger.warn("Dispatch error for action {}: retcode={}", request.action, e.retcode)
-            ActionResponse.failed(e.retcode, request.echo)
-        } catch (e: Exception) {
-            logger.warn("Failed to handle action {}", request.action, e)
-            ActionResponse.badRequest(request.echo)
-        }
+        val actionResponse = handleActionRequest(request, actionHandler, paramParser, resultParser, logger)
         return json.encodeToString(ActionResponse.serializer(), actionResponse)
     }
 }

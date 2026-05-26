@@ -41,8 +41,10 @@ data class ActionResponse(
         const val STATUS_FAILED = "failed"
 
         // retcode 与 HTTP 状态码对照（OneBot 11 规范）
-        const val RETCODE_BAD_REQUEST = 1400   // 400
-        const val RETCODE_NOT_FOUND = 1404     // 404
+        const val RETCODE_BAD_REQUEST = 1400    // 400
+        const val RETCODE_UNAUTHORIZED = 1401   // 401
+        const val RETCODE_FORBIDDEN = 1403      // 403
+        const val RETCODE_NOT_FOUND = 1404      // 404
 
         fun ok(data: JsonElement, echo: String? = null) =
             ActionResponse(status = STATUS_OK, retcode = 0, data = data, echo = echo)
@@ -54,6 +56,8 @@ data class ActionResponse(
             ActionResponse(status = STATUS_FAILED, retcode = retcode, data = JsonNull, echo = echo)
 
         fun badRequest(echo: String? = null) = failed(RETCODE_BAD_REQUEST, echo)
+        fun unauthorized(echo: String? = null) = failed(RETCODE_UNAUTHORIZED, echo)
+        fun forbidden(echo: String? = null) = failed(RETCODE_FORBIDDEN, echo)
         fun notFound(echo: String? = null) = failed(RETCODE_NOT_FOUND, echo)
     }
 }

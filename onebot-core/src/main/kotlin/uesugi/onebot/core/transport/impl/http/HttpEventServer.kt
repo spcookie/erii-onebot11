@@ -53,7 +53,10 @@ class HttpEventServer(
                 post("/event") { handleEventPost(call) }
             }
         }
+        val started = CompletableDeferred<Unit>()
+        server!!.monitor.subscribe(ApplicationStarted) { started.complete(Unit) }
         server!!.start(wait = false)
+        started.await()
         logger.info("HTTP Event server listening on {}:{}", config.httpPostHost, config.httpPostPort)
     }
 

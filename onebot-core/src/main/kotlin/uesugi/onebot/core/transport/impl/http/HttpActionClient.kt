@@ -5,6 +5,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 import uesugi.onebot.core.config.OneBotConfig
 import uesugi.onebot.core.model.ActionResponse
 import uesugi.onebot.core.model.OneBotActionParams
@@ -25,6 +26,7 @@ class HttpActionClient(
     private val client: HttpClient = HttpClient()
 ) : ActionChannel {
 
+    private val logger = LoggerFactory.getLogger(HttpActionClient::class.java)
     private val json: Json = JsonFactory.base
     private val baseUrl = "http://${config.httpHost}:${config.httpPort}"
     private val paramParser = ActionParamParser(config.messageFormat)
@@ -39,7 +41,18 @@ class HttpActionClient(
             setBody(json.encodeToString(paramParser.serialize(action, params)))
         }
 
-        val actionResponse: ActionResponse = json.decodeFromString(response.bodyAsText())
+        val body = response.bodyAsText()
+        val actionResponse: ActionResponse = json.decodeFromString(ActionResponse.serializer(), body)
+
+        if (!response.status.isSuccess()) {
+            logger.warn(
+                "HTTP action '{}' failed: status={}, retcode={}",
+                action,
+                response.status.value,
+                actionResponse.retcode
+            )
+        }
+
         return resultParser.deserialize(action, actionResponse.data)
     }
 

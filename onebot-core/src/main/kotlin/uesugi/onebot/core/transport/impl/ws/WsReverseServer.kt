@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 import org.slf4j.LoggerFactory
 import uesugi.onebot.core.config.OneBotConfig
 import uesugi.onebot.core.model.*
@@ -105,7 +104,10 @@ class WsReverseServer(
                 webSocket("/") { handleSession() }
             }
         }
+        val started = CompletableDeferred<Unit>()
+        server!!.monitor.subscribe(ApplicationStarted) { started.complete(Unit) }
         server!!.start(wait = false)
+        started.await()
         logger.info("WsReverseServer started on ws://{}:{}", config.wsReverseServerHost, config.wsReverseServerPort)
     }
 
@@ -127,7 +129,7 @@ class WsReverseServer(
         val role = call.request.headers["X-Client-Role"]?.lowercase() ?: "universal"
         val selfId = call.request.headers["X-Self-ID"] ?: "unknown"
 
-        if (!authenticate()) return
+        if (!authenticateWs(config, logger)) return
 
         logger.info("Reverse WS client connected: role={}, selfId={}", role, selfId)
 
@@ -136,17 +138,6 @@ class WsReverseServer(
             "event" -> handleEventSession(selfId)
             else -> handleUniversalSession(selfId)
         }
-    }
-
-    private suspend fun DefaultWebSocketServerSession.authenticate(): Boolean {
-        if (config.accessToken.isNullOrBlank()) return true
-        val auth = call.request.headers["Authorization"]
-        if (auth != config.authHeader) {
-            logger.warn("Reverse WS auth failed, closing connection")
-            close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Unauthorized"))
-            return false
-        }
-        return true
     }
 
     // --- API Session ---
@@ -161,6 +152,9 @@ class WsReverseServer(
                 if (frame !is Frame.Text) continue
                 try {
                     val resp = json.decodeFromString(ActionResponse.serializer(), frame.readText())
+                    if (resp.retcode != 0) {
+                        logger.warn("API call failed via reverse WS: retcode={}, echo={}", resp.retcode, resp.echo)
+                    }
                     resp.echo?.let { echoTracker.resolve(it, resp) }
                 } catch (e: Exception) {
                     logger.debug("Non API response on reverse API channel: {}", e.message)
@@ -181,16 +175,7 @@ class WsReverseServer(
                 if (frame !is Frame.Text) continue
                 try {
                     val event = eventParser.deserialize(frame.readText())
-                    event.quickOpHandler = QuickOpHandler { op ->
-                        try {
-                            val context = baseJson.encodeToJsonElement(OneBotEvent.serializer(), event).jsonObject
-                            val operationJson = baseJson.encodeToJsonElement(QuickOperation.serializer(), op).jsonObject
-                            val params = JsonObject(mapOf("context" to context, "operation" to operationJson))
-                            call(ActionName.HANDLE_QUICK_OPERATION, RawActionParams(params))
-                        } catch (e: Exception) {
-                            logger.error("Quick operation handler failed", e)
-                        }
-                    }
+                    setupQuickOpHandler(event)
                     eventChannel.send(event)
                 } catch (e: Exception) {
                     logger.debug("Failed to parse event from selfId={}: {}", selfId, e.message)
@@ -218,6 +203,13 @@ class WsReverseServer(
                         when {
                             elem.containsKey("echo") && elem.containsKey("retcode") -> {
                                 val resp = json.decodeFromJsonElement(ActionResponse.serializer(), elem)
+                                if (resp.retcode != 0) {
+                                    logger.warn(
+                                        "API call failed via reverse WS: retcode={}, echo={}",
+                                        resp.retcode,
+                                        resp.echo
+                                    )
+                                }
                                 if (resp.echo != null) {
                                     echoTracker.resolve(resp.echo, resp)
                                 } else {
@@ -227,19 +219,7 @@ class WsReverseServer(
 
                             elem.containsKey("post_type") -> {
                                 val event = eventParser.deserialize(text)
-                                event.quickOpHandler = QuickOpHandler { op ->
-                                    try {
-                                        val context =
-                                            baseJson.encodeToJsonElement(OneBotEvent.serializer(), event).jsonObject
-                                        val operationJson =
-                                            baseJson.encodeToJsonElement(QuickOperation.serializer(), op).jsonObject
-                                        val params =
-                                            JsonObject(mapOf("context" to context, "operation" to operationJson))
-                                        call(ActionName.HANDLE_QUICK_OPERATION, RawActionParams(params))
-                                    } catch (e: Exception) {
-                                        logger.error("Quick operation handler failed", e)
-                                    }
-                                }
+                                setupQuickOpHandler(event)
                                 eventChannel.send(event)
                             }
 
@@ -257,6 +237,12 @@ class WsReverseServer(
         } finally {
             sessionsMutex.withLock { universalSessions.remove(this) }
         }
+    }
+
+    // --- 工具 ---
+
+    private fun setupQuickOpHandler(event: OneBotEvent) {
+        event.quickOpHandler = createQuickOpHandler(event, baseJson, ::call, logger)
     }
 
     // --- Session 管理 ---
