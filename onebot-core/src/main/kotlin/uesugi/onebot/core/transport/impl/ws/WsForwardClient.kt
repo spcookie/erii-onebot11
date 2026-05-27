@@ -66,7 +66,7 @@ private suspend fun connectWithRetry(
                 }
             }
         } catch (e: Exception) {
-            logger.warn("WS forward disconnected: {}", e.message)
+            logger.warn("WS forward disconnected({}): {}", url, e.message)
         }
         delay(reconnectInterval.milliseconds)
     }

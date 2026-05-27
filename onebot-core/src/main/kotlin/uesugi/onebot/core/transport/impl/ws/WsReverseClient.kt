@@ -91,7 +91,7 @@ class WsReverseActionClient(
                     }
                 }
             } catch (e: Exception) {
-                logger.warn("WsReverseActionClient disconnected: {}", e.message)
+                logger.warn("WsReverseActionClient disconnected({}): {}", url, e.message)
             }
             delay(config.wsReverseClientReconnectInterval.milliseconds)
         }
