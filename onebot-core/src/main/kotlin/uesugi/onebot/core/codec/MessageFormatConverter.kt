@@ -45,11 +45,10 @@ object MessageFormatConverter {
     // ===== 内部工具 =====
 
     private fun segmentToJson(segment: MessageSegment): JsonObject {
-        val dataJson = JsonObject(segment.data.mapValues { (_, v) -> JsonPrimitive(v) })
         return JsonObject(
             mapOf(
                 "type" to JsonPrimitive(segment.type),
-                "data" to dataJson
+                "data" to JsonObject(segment.data)
             )
         )
     }
@@ -58,9 +57,7 @@ object MessageFormatConverter {
         val type = this["type"]?.let {
             if (it is JsonPrimitive) it.content else null
         } ?: return null
-        val data = this["data"]?.jsonObject?.mapValues { (_, v) ->
-            if (v is JsonPrimitive) v.content else v.toString()
-        } ?: emptyMap()
+        val data = this["data"]?.jsonObject ?: emptyMap()
         return MessageSegment(type, data)
     }
 }

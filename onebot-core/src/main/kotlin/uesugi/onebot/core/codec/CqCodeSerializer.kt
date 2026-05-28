@@ -1,5 +1,7 @@
 package uesugi.onebot.core.codec
 
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import uesugi.onebot.core.model.MessageSegment
 
 /**
@@ -15,14 +17,14 @@ object CqCodeSerializer {
         val sb = StringBuilder()
         for (segment in segments) {
             if (segment.type == "text") {
-                sb.append(CqEscape.escapeText(segment.data["text"] ?: ""))
+                sb.append(CqEscape.escapeText(segment.data["text"]?.jsonPrimitive?.content ?: ""))
             } else {
                 sb.append("[CQ:${segment.type}")
                 for ((key, value) in segment.data) {
                     sb.append(',')
                     sb.append(key)
                     sb.append('=')
-                    sb.append(CqEscape.escapeParam(value))
+                    sb.append(CqEscape.escapeParam(if (value is JsonPrimitive) value.content else value.toString()))
                 }
                 sb.append(']')
             }

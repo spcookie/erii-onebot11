@@ -19,7 +19,7 @@ class SerializationTest {
         val decoded: MessageSegment = json.decodeFromString(MessageSegment.serializer(), encoded)
 
         assertEquals("text", decoded.type)
-        assertEquals("Hello World", decoded.data["text"])
+        assertEquals("Hello World", decoded.data["text"]?.jsonPrimitive?.content)
     }
 
     @Test
@@ -30,7 +30,7 @@ class SerializationTest {
         val decoded: MessageSegment = json.decodeFromString(MessageSegment.serializer(), encoded)
 
         assertEquals("at", decoded.type)
-        assertEquals("123456789", decoded.data["qq"])
+        assertEquals("123456789", decoded.data["qq"]?.jsonPrimitive?.content)
     }
 
     @Test
@@ -40,7 +40,7 @@ class SerializationTest {
 
         val decoded: MessageSegment = json.decodeFromString(MessageSegment.serializer(), encoded)
         assertEquals("reply", decoded.type)
-        assertEquals("42", decoded.data["id"])
+        assertEquals("42", decoded.data["id"]?.jsonPrimitive?.content)
     }
 
     @Test
@@ -54,7 +54,7 @@ class SerializationTest {
         val decodedWith: MessageSegment = json.decodeFromString(MessageSegment.serializer(), encodedWith)
         val decodedWithout: MessageSegment = json.decodeFromString(MessageSegment.serializer(), encodedWithout)
 
-        assertEquals("http://example.com/img.jpg", decodedWith.data["url"])
+        assertEquals("http://example.com/img.jpg", decodedWith.data["url"]?.jsonPrimitive?.content)
         assertEquals(null, decodedWithout.data["url"])
     }
 
@@ -468,21 +468,21 @@ class SerializationTest {
     fun `textSegment factory`() {
         val seg = textSegment("hello")
         assertEquals("text", seg.type)
-        assertEquals("hello", seg.data["text"])
+        assertEquals("hello", seg.data["text"]?.jsonPrimitive?.content)
     }
 
     @Test
     fun `atSegment factory`() {
         val seg = atSegment(12345L)
         assertEquals("at", seg.type)
-        assertEquals("12345", seg.data["qq"])
+        assertEquals("12345", seg.data["qq"]?.jsonPrimitive?.content)
     }
 
     @Test
     fun `imageSegment factory with optional url`() {
         val seg = imageSegment("img.jpg")
         assertEquals("image", seg.type)
-        assertEquals("img.jpg", seg.data["file"])
+        assertEquals("img.jpg", seg.data["file"]?.jsonPrimitive?.content)
         assertEquals(null, seg.data["url"])
     }
 
@@ -490,20 +490,20 @@ class SerializationTest {
     fun `faceSegment factory`() {
         val seg = faceSegment("1")
         assertEquals("face", seg.type)
-        assertEquals("1", seg.data["id"])
+        assertEquals("1", seg.data["id"]?.jsonPrimitive?.content)
     }
 
     @Test
     fun `recordSegment factory`() {
         val seg = recordSegment("audio.mp3")
         assertEquals("record", seg.type)
-        assertEquals("audio.mp3", seg.data["file"])
+        assertEquals("audio.mp3", seg.data["file"]?.jsonPrimitive?.content)
     }
 
     @Test
     fun `videoSegment factory`() {
         val seg = videoSegment("video.mp4")
         assertEquals("video", seg.type)
-        assertEquals("video.mp4", seg.data["file"])
+        assertEquals("video.mp4", seg.data["file"]?.jsonPrimitive?.content)
     }
 }

@@ -4,6 +4,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Test
 import uesugi.onebot.core.config.OneBotConfig
 import uesugi.onebot.core.model.*
@@ -84,7 +86,7 @@ class MessageSegmentIntegrationTest {
             val event = withTimeout(3000) { captured.await() }
             assertEquals(1, event.message.size)
             assertEquals("text", event.message[0].type)
-            assertEquals("plain text message", event.message[0].data["text"])
+            assertEquals("plain text message", event.message[0].data["text"]?.jsonPrimitive?.content)
         } finally {
             cleanup()
         }
@@ -100,7 +102,7 @@ class MessageSegmentIntegrationTest {
             assertNotNull(msg)
             val face = msg.message.find { it.type == "face" }
             assertNotNull(face)
-            assertEquals("178", face.data["id"])
+            assertEquals("178", face.data["id"]?.jsonPrimitive?.content)
         } finally {
             cleanup()
         }
@@ -125,7 +127,7 @@ class MessageSegmentIntegrationTest {
         try {
             val msgId = client.sendGroupMsg(
                 12345, listOf(
-                    MessageSegment("at", mapOf("qq" to "all")),
+                    MessageSegment("at", mapOf("qq" to JsonPrimitive("all"))),
                     textSegment(" everyone")
                 )
             )
@@ -149,7 +151,7 @@ class MessageSegmentIntegrationTest {
             assertNotNull(msg)
             val img = msg.message.find { it.type == "image" }
             assertNotNull(img)
-            assertEquals("https://example.com/img.jpg", img.data["file"])
+            assertEquals("https://example.com/img.jpg", img.data["file"]?.jsonPrimitive?.content)
         } finally {
             cleanup()
         }
@@ -269,8 +271,8 @@ class MessageSegmentIntegrationTest {
             val msg = client.getMsg(msgId)
             val share = msg?.message?.find { it.type == "share" }
             assertNotNull(share)
-            assertEquals("https://example.com", share.data["url"])
-            assertEquals("Title", share.data["title"])
+            assertEquals("https://example.com", share.data["url"]?.jsonPrimitive?.content)
+            assertEquals("Title", share.data["title"]?.jsonPrimitive?.content)
         } finally {
             cleanup()
         }
@@ -285,7 +287,7 @@ class MessageSegmentIntegrationTest {
             val msg = client.getMsg(msgId)
             val contact = msg?.message?.find { it.type == "contact" }
             assertNotNull(contact)
-            assertEquals("qq", contact.data["type"])
+            assertEquals("qq", contact.data["type"]?.jsonPrimitive?.content)
         } finally {
             cleanup()
         }
@@ -304,8 +306,8 @@ class MessageSegmentIntegrationTest {
             val msg = client.getMsg(msgId)
             val loc = msg?.message?.find { it.type == "location" }
             assertNotNull(loc)
-            assertEquals("39.9042", loc.data["lat"])
-            assertEquals("116.4074", loc.data["lon"])
+            assertEquals("39.9042", loc.data["lat"]?.jsonPrimitive?.content)
+            assertEquals("116.4074", loc.data["lon"]?.jsonPrimitive?.content)
         } finally {
             cleanup()
         }
@@ -324,7 +326,7 @@ class MessageSegmentIntegrationTest {
             val msg = client.getMsg(msgId)
             val music = msg?.message?.find { it.type == "music" }
             assertNotNull(music)
-            assertEquals("163", music.data["type"])
+            assertEquals("163", music.data["type"]?.jsonPrimitive?.content)
         } finally {
             cleanup()
         }
@@ -363,7 +365,7 @@ class MessageSegmentIntegrationTest {
             val msg = client.getMsg(msgId)
             val reply = msg?.message?.find { it.type == "reply" }
             assertNotNull(reply)
-            assertEquals("42", reply.data["id"])
+            assertEquals("42", reply.data["id"]?.jsonPrimitive?.content)
         } finally {
             cleanup()
         }
@@ -404,7 +406,7 @@ class MessageSegmentIntegrationTest {
             val msg = client.getMsg(msgId)
             val xml = msg?.message?.find { it.type == "xml" }
             assertNotNull(xml)
-            assertTrue(xml.data["data"]?.contains("hello") == true)
+            assertTrue(xml.data["data"]?.jsonPrimitive?.content?.contains("hello") == true)
         } finally {
             cleanup()
         }
@@ -423,7 +425,7 @@ class MessageSegmentIntegrationTest {
             val msg = client.getMsg(msgId)
             val json = msg?.message?.find { it.type == "json" }
             assertNotNull(json)
-            assertTrue(json.data["data"]?.contains("com.example") == true)
+            assertTrue(json.data["data"]?.jsonPrimitive?.content?.contains("com.example") == true)
         } finally {
             cleanup()
         }

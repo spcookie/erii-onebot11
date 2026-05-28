@@ -1,5 +1,6 @@
 package uesugi.onebot.sdk.message
 
+import kotlinx.serialization.json.JsonPrimitive
 import uesugi.onebot.core.model.*
 
 /**
@@ -27,7 +28,7 @@ class MessageBuilder {
     }
 
     fun atAll() {
-        segments.add(MessageSegment("at", mapOf("qq" to "all")))
+        segments.add(MessageSegment("at", mapOf("qq" to JsonPrimitive("all"))))
     }
 
     fun image(

@@ -1,5 +1,7 @@
 package uesugi.onebot.core.codec
 
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import uesugi.onebot.core.model.MessageSegment
 import uesugi.onebot.core.model.textSegment
 
@@ -61,10 +63,10 @@ object CqCodeParser {
      * 解析 CQ 码参数：key1=value1,key2=value2
      * 注意：逗号需要反转义（&#44; → ,），等号只取第一个
      */
-    internal fun parseParams(paramsStr: String): Map<String, String> {
+    internal fun parseParams(paramsStr: String): Map<String, JsonElement> {
         if (paramsStr.isBlank()) return emptyMap()
 
-        val params = mutableMapOf<String, String>()
+        val params = mutableMapOf<String, JsonElement>()
         // 按逗号分割，但要注意转义的逗号（&#44;）不分割
         val pairs = splitParams(paramsStr)
 
@@ -74,7 +76,7 @@ object CqCodeParser {
             val key = pair.substring(0, eqIdx).trim()
             val value = pair.substring(eqIdx + 1)
             if (key.isNotEmpty()) {
-                params[key] = CqEscape.unescapeParam(value)
+                params[key] = JsonPrimitive(CqEscape.unescapeParam(value))
             }
         }
 

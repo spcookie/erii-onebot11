@@ -4,6 +4,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Test
 import uesugi.onebot.core.config.OneBotConfig
 import uesugi.onebot.core.model.*
@@ -63,7 +64,7 @@ class WsForwardIntegrationTest {
             mockBot.simulatePrivateMessage(10086, "ws event test")
             val event = withTimeout(5000) { eventCaptured.await() }
             assertEquals(10086, event.userId)
-            assertTrue(event.message.any { it.data["text"]?.contains("ws event test") == true })
+            assertTrue(event.message.any { it.data["text"]?.jsonPrimitive?.content?.contains("ws event test") == true })
         } finally {
             client.stop()
             mockBot.stop()
