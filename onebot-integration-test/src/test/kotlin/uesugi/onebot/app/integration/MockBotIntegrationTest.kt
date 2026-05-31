@@ -12,6 +12,7 @@ import uesugi.onebot.core.model.*
 import uesugi.onebot.mock.MockBot
 import uesugi.onebot.sdk.client.OneBotClient
 import uesugi.onebot.sdk.client.api.*
+import java.awt.SystemColor.text
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -96,7 +97,7 @@ class MockBotIntegrationTest {
     @Test
     fun testSendPrivateMsg() {
         runBlocking {
-            val msgId = client.sendPrivateMsg(10086, listOf(textSegment("hello")))
+            val msgId = client.sendPrivateMsg(10086, listOf(text("hello")))
             assertTrue(msgId > 0, "message_id should be positive")
 
             val msg = client.getMsg(msgId)
@@ -108,7 +109,7 @@ class MockBotIntegrationTest {
     @Test
     fun testSendGroupMsg() {
         runBlocking {
-            val msgId = client.sendGroupMsg(12345, listOf(textSegment("hello group")))
+            val msgId = client.sendGroupMsg(12345, listOf(text("hello group")))
             assertTrue(msgId > 0)
 
             val msg = client.getMsg(msgId)
@@ -120,7 +121,7 @@ class MockBotIntegrationTest {
     @Test
     fun testSendMsg() {
         runBlocking {
-            val msgId = client.sendMsg("private", 10086, null, listOf(textSegment("hello via send_msg")))
+            val msgId = client.sendMsg("private", 10086, null, listOf(text("hello via send_msg")))
             assertTrue(msgId > 0)
         }
     }
@@ -128,7 +129,7 @@ class MockBotIntegrationTest {
     @Test
     fun testDeleteMsg() {
         runBlocking {
-            val msgId = client.sendPrivateMsg(10086, listOf(textSegment("to delete")))
+            val msgId = client.sendPrivateMsg(10086, listOf(text("to delete")))
             client.deleteMsg(msgId)
         }
     }
@@ -421,7 +422,7 @@ class MockBotIntegrationTest {
     fun testPrivateMessageEvent() {
         runBlocking {
             val captured = captureEvent<PrivateMessageEvent>()
-            mockBot.simulatePrivateMessage(10086, "test private msg")
+            mockBot.simulatePrivateMessage(10086, listOf(text("test private msg")))
             val event = withTimeout(3000) { captured.await() }
             assertEquals(10086, event.userId)
             assertEquals("private", event.messageType)
@@ -432,7 +433,7 @@ class MockBotIntegrationTest {
     fun testGroupMessageEvent() {
         runBlocking {
             val captured = captureEvent<GroupMessageEvent>()
-            mockBot.simulateGroupMessage(12345, 10086, "test group msg")
+            mockBot.simulateGroupMessage(12345, 10086, listOf(text("test group msg")))
             val event = withTimeout(3000) { captured.await() }
             assertEquals(12345, event.groupId)
             assertEquals(10086, event.userId)
@@ -681,7 +682,7 @@ class MockBotIntegrationTest {
             mockBot.addGroupMember(groupId, 20001, "User1")
             mockBot.addGroupMember(groupId, 20002, "User2")
 
-            val msgId = client.sendGroupMsg(groupId, listOf(textSegment("Hello everyone")))
+            val msgId = client.sendGroupMsg(groupId, listOf(text("Hello everyone")))
             assertTrue(msgId > 0)
 
             val msg = client.getMsg(msgId)
@@ -714,7 +715,7 @@ class MockBotIntegrationTest {
             mockBot.addUser(userId, "PrivateUser")
             mockBot.addFriend(userId, "PrivateUser")
 
-            val msgId = client.sendPrivateMsg(userId, listOf(textSegment("Hey there")))
+            val msgId = client.sendPrivateMsg(userId, listOf(text("Hey there")))
             assertTrue(msgId > 0)
 
             val msg = client.getMsg(msgId)

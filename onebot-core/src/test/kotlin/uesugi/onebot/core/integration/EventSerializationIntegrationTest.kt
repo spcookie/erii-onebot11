@@ -3,6 +3,7 @@ package uesugi.onebot.core.integration
 import uesugi.onebot.core.model.*
 import uesugi.onebot.core.parser.EventParser
 import uesugi.onebot.core.transport.JsonFactory
+import java.awt.SystemColor.text
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -24,7 +25,7 @@ class EventSerializationIntegrationTest {
             time = 1700000000L, selfId = 10001L,
             subType = "friend", messageId = 12345,
             userId = 987654321L,
-            message = listOf(textSegment("hello")),
+            message = listOf(text("hello")),
             rawMessage = "hello",
             sender = Sender(987654321L, "TestUser", sex = "male", age = 18)
         )
@@ -45,7 +46,7 @@ class EventSerializationIntegrationTest {
             time = 1700000000L, selfId = 10001L,
             subType = "normal", messageId = 67890,
             groupId = 555666777L, userId = 111222333L,
-            message = listOf(atSegment(10001L), textSegment(" hello")),
+            message = listOf(at(10001L), text(" hello")),
             rawMessage = "[CQ:at,qq=10001] hello",
             sender = GroupSender(111222333L, "GroupUser", card = "CardName", role = "admin", title = "VIP")
         )
@@ -203,7 +204,7 @@ class EventSerializationIntegrationTest {
             time = 1700000000L, selfId = 10001L,
             subType = "friend", messageId = 1,
             userId = 1L,
-            message = listOf(textSegment("test")),
+            message = listOf(text("test")),
             rawMessage = "test"
         )
         val serialized = json.encodeToString(PrivateMessageEvent.serializer(), event)

@@ -2,6 +2,7 @@ package uesugi.onebot.mock.storage
 
 import org.junit.Test
 import uesugi.onebot.core.model.*
+import java.awt.SystemColor.text
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -100,7 +101,7 @@ class InMemoryStorageTest {
     fun `saveMessage from PrivateMessageEvent`() {
         val event = PrivateMessageEvent(
             time = 1000, selfId = 10001, userId = 10086,
-            message = listOf(textSegment("hi")), rawMessage = "hi",
+            message = listOf(text("hi")), rawMessage = "hi",
             sender = Sender(10086, "Alice")
         )
         val info = storage.saveMessage(event)
@@ -112,7 +113,7 @@ class InMemoryStorageTest {
     fun `saveMessage from GroupMessageEvent`() {
         val event = GroupMessageEvent(
             time = 1000, selfId = 10001, groupId = 12345, userId = 10086,
-            message = listOf(textSegment("hi")), rawMessage = "hi",
+            message = listOf(text("hi")), rawMessage = "hi",
             sender = GroupSender(10086, "Alice")
         )
         val info = storage.saveMessage(event)
