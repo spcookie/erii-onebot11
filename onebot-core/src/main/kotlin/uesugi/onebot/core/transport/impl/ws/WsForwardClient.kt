@@ -1,6 +1,7 @@
 package uesugi.onebot.core.transport.impl.ws
 
 import io.ktor.client.*
+import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -85,7 +86,7 @@ private fun createScope(logger: Logger): CoroutineScope {
 class WsForwardApiClient(
     private val config: OneBotConfig,
     private val echoTracker: EchoTracker,
-    private val client: HttpClient = HttpClient { install(WebSockets) }
+    private val client: HttpClient = HttpClient(CIO) { install(WebSockets) }
 ) : ActionChannel {
 
     private val logger = LoggerFactory.getLogger(WsForwardApiClient::class.java)
@@ -141,7 +142,7 @@ class WsForwardApiClient(
 class WsForwardEventClient(
     private val config: OneBotConfig,
     private val actionHandler: suspend (String, OneBotActionParams) -> OneBotActionResult,
-    private val client: HttpClient = HttpClient { install(WebSockets) }
+    private val client: HttpClient = HttpClient(CIO) { install(WebSockets) }
 ) : EventChannel {
 
     private val logger = LoggerFactory.getLogger(WsForwardEventClient::class.java)
@@ -187,7 +188,7 @@ class WsForwardEventClient(
 class WsForwardUniversalClient(
     private val config: OneBotConfig,
     private val echoTracker: EchoTracker,
-    private val client: HttpClient = HttpClient { install(WebSockets) }
+    private val client: HttpClient = HttpClient(CIO) { install(WebSockets) }
 ) : ActionChannel, EventChannel {
 
     private val logger = LoggerFactory.getLogger(WsForwardUniversalClient::class.java)

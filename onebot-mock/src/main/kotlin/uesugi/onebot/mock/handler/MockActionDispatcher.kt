@@ -20,6 +20,9 @@ class MockActionDispatcher(
     /** 当 simulateAction 调用时设置为模拟用户的 ID（0 = 使用 bot selfId） */
     var actorUserId: Long = 0
 
+    /** 当 bot 自己（非模拟用户）发送群消息时回调，用于 ChatBridge 捕获响应 */
+    var onBotSendGroupMsg: (suspend (GroupMessageEvent) -> Unit)? = null
+
     /** 当前 actor 的 ID，如果 simulateAction 未设置则 fallback 到 bot selfId */
     private val actorId: Long get() = if (actorUserId > 0) actorUserId else storage.selfId
 
@@ -69,6 +72,11 @@ class MockActionDispatcher(
             )
             storage.saveMessage(event)
             pushEvent(event)
+
+            if (actorUserId == 0L) {
+                onBotSendGroupMsg?.invoke(event)
+            }
+
             MessageIdResult(msgId)
         }
 

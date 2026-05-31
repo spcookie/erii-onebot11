@@ -1,6 +1,7 @@
 package uesugi.onebot.core.transport.impl.ws
 
 import io.ktor.client.*
+import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -32,7 +33,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class WsReverseActionClient(
     private val config: OneBotConfig,
     override val actionHandler: suspend (String, OneBotActionParams) -> OneBotActionResult,
-    private val client: HttpClient = HttpClient { install(WebSockets) }
+    private val client: HttpClient = HttpClient(CIO) { install(WebSockets) }
 ) : ActionServerChannel {
 
     private val logger = LoggerFactory.getLogger(WsReverseActionClient::class.java)
@@ -112,7 +113,7 @@ class WsReverseActionClient(
  */
 class WsReverseEventClient(
     private val config: OneBotConfig,
-    private val client: HttpClient = HttpClient { install(WebSockets) }
+    private val client: HttpClient = HttpClient(CIO) { install(WebSockets) }
 ) : EventPushChannel {
 
     private val logger = LoggerFactory.getLogger(WsReverseEventClient::class.java)
@@ -192,7 +193,7 @@ class WsReverseEventClient(
 class WsReverseUniversalClient(
     private val config: OneBotConfig,
     override val actionHandler: suspend (String, OneBotActionParams) -> OneBotActionResult,
-    private val client: HttpClient = HttpClient { install(WebSockets) }
+    private val client: HttpClient = HttpClient(CIO) { install(WebSockets) }
 ) : ActionServerChannel, EventPushChannel {
 
     private val logger = LoggerFactory.getLogger(WsReverseUniversalClient::class.java)

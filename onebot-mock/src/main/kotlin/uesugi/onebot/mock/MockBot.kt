@@ -46,6 +46,13 @@ class MockBot(
 
     suspend fun pushEvent(event: OneBotEvent) = server.pushEvent(event)
 
+    /** 当 bot 自己发送群消息时回调，用于 ChatBridge 捕获响应 */
+    var onBotSendGroupMsg: (suspend (GroupMessageEvent) -> Unit)?
+        get() = dispatcher.onBotSendGroupMsg
+        set(value) {
+            dispatcher.onBotSendGroupMsg = value
+        }
+
     // ===== Management APIs =====
 
     fun addGroup(groupId: Long, name: String, memberCount: Int = 0): GroupInfo {
@@ -110,24 +117,24 @@ class MockBot(
 
     // ===== Convenience Simulation Methods =====
 
-    suspend fun simulatePrivateMessage(fromUserId: Long, text: String) {
+    suspend fun simulatePrivateMessage(fromUserId: Long, message: MessageContent) {
         simulateAction(
             userId = fromUserId,
             action = ActionName.SEND_PRIVATE_MSG,
             request = SendPrivateMsgRequest(
                 userId = config.selfId,
-                message = listOf(textSegment(text))
+                message = message
             )
         )
     }
 
-    suspend fun simulateGroupMessage(groupId: Long, fromUserId: Long, text: String) {
+    suspend fun simulateGroupMessage(groupId: Long, fromUserId: Long, message: MessageContent) {
         simulateAction(
             userId = fromUserId,
             action = ActionName.SEND_GROUP_MSG,
             request = SendGroupMsgRequest(
                 groupId = groupId,
-                message = listOf(textSegment(text))
+                message = message
             )
         )
     }
