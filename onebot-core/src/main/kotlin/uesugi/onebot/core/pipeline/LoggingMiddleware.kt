@@ -30,7 +30,9 @@ class LoggingMiddleware(
     }
 
     override suspend fun interceptEvent(event: OneBotEvent, next: EventHandler) {
-        logger.info("[{}] Event: post_type={} detailType={}", name, event.postType, event.detailType)
+        if (event.detailType != "heartbeat") {
+            logger.info("[{}] Event: post_type={} detailType={}", name, event.postType, event.detailType)
+        }
         next(event)
     }
 }
