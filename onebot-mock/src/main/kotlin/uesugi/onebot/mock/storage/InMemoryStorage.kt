@@ -2,6 +2,9 @@ package uesugi.onebot.mock.storage
 
 import uesugi.onebot.core.model.*
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class InMemoryStorage(override val selfId: Long = 10001) : MockStorage {
@@ -10,9 +13,31 @@ class InMemoryStorage(override val selfId: Long = 10001) : MockStorage {
     private val groups = ConcurrentHashMap<Long, GroupInfo>()
     private val groupMembers = ConcurrentHashMap<String, GroupMemberInfo>()
     private val messages = ConcurrentHashMap<Int, MessageInfo>()
-    private val groupMessages = ConcurrentHashMap<Long, MutableList<Int>>()
-    private val privateMessages = ConcurrentHashMap<Long, MutableList<Int>>()
+    private val groupMessages = ConcurrentHashMap<Long, CopyOnWriteArrayList<Int>>()
+    private val privateMessages = ConcurrentHashMap<Long, CopyOnWriteArrayList<Int>>()
     private val messageIdCounter = AtomicInteger(1)
+
+    private val cleanupExecutor = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "InMemoryStorage-cleanup").apply { isDaemon = true }
+    }
+
+    init {
+        cleanupExecutor.scheduleAtFixedRate(
+            ::cleanupOldMessages,
+            1, 1, TimeUnit.DAYS
+        )
+    }
+
+    private fun cleanupOldMessages() {
+        val oneWeekAgo = System.currentTimeMillis() / 1000 - 7 * 24 * 60 * 60
+        val toRemove = messages.filterValues { it.time < oneWeekAgo }.keys
+        if (toRemove.isEmpty()) return
+        toRemove.forEach { id ->
+            messages.remove(id)
+            groupMessages.values.forEach { it.remove(id) }
+            privateMessages.values.forEach { it.remove(id) }
+        }
+    }
 
     override fun addUser(user: Sender) {
         users[user.userId] = user
@@ -76,8 +101,8 @@ class InMemoryStorage(override val selfId: Long = 10001) : MockStorage {
         }
         messages[msgId] = info
         when (event) {
-            is GroupMessageEvent -> groupMessages.getOrPut(event.groupId) { mutableListOf() }.add(msgId)
-            is PrivateMessageEvent -> privateMessages.getOrPut(event.userId) { mutableListOf() }.add(msgId)
+            is GroupMessageEvent -> groupMessages.getOrPut(event.groupId) { CopyOnWriteArrayList() }.add(msgId)
+            is PrivateMessageEvent -> privateMessages.getOrPut(event.userId) { CopyOnWriteArrayList() }.add(msgId)
         }
         return info
     }
