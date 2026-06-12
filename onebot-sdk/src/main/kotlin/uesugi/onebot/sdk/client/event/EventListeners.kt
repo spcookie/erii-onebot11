@@ -1,6 +1,7 @@
-package uesugi.onebot.sdk.client
+package uesugi.onebot.sdk.client.event
 
 import uesugi.onebot.core.model.*
+import uesugi.onebot.sdk.client.OneBotClient
 
 // 基础类型安全监听器
 
