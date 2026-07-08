@@ -32,6 +32,11 @@ class ActionParamParser(
     }
 
     init {
+        // 基础
+        register(ActionName.GET_LOGIN_INFO, EmptyActionParams.serializer())
+        register(ActionName.GET_STATUS, EmptyActionParams.serializer())
+        register(ActionName.GET_VERSION_INFO, EmptyActionParams.serializer())
+
         // 消息
         register(ActionName.SEND_PRIVATE_MSG, SendPrivateMsgRequest.serializer())
         register(ActionName.SEND_GROUP_MSG, SendGroupMsgRequest.serializer())
