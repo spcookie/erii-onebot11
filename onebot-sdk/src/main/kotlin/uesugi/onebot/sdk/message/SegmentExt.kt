@@ -15,6 +15,9 @@ inline fun <reified T> MessageSegment.toData(): T =
 /** 获取 text 消息段的文本内容 */
 val MessageSegment.text: String? get() = json("text")
 
+/** 获取 markdown 消息段的原生 Markdown 内容 */
+val MessageSegment.markdownContent: String? get() = json("content")
+
 /** 获取 at 消息段的 QQ 号 */
 val MessageSegment.atQq: Long? get() = json("qq")?.toLongOrNull()
 

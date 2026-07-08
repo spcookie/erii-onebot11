@@ -25,6 +25,12 @@ fun textSegment(text: String): MessageSegment = MessageSegment(
     data = mapOf("text" to JsonPrimitive(text))
 )
 
+/** 创建 markdown 消息段，content 为平台原生 Markdown 内容 */
+fun markdownSegment(content: String): MessageSegment = MessageSegment(
+    type = "markdown",
+    data = mapOf("content" to JsonPrimitive(content))
+)
+
 /** 创建 at 消息段（qq 为 QQ 号，或 "all" 表示 @全体成员） */
 fun atSegment(qq: Long): MessageSegment = MessageSegment(
     type = "at",

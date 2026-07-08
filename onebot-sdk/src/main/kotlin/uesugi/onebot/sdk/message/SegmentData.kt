@@ -8,6 +8,9 @@ import kotlinx.serialization.Serializable
 data class TextData(val text: String)
 
 @Serializable
+data class MarkdownData(val content: String)
+
+@Serializable
 data class AtData(val qq: String)
 
 @Serializable

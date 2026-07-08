@@ -23,6 +23,10 @@ class MessageBuilder {
         segments.add(textSegment(text))
     }
 
+    fun markdown(content: String) {
+        segments.add(markdownSegment(content))
+    }
+
     fun at(qq: Long) {
         segments.add(atSegment(qq))
     }
