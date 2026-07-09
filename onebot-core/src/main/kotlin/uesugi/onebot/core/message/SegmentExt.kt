@@ -1,4 +1,4 @@
-package uesugi.onebot.sdk.message
+package uesugi.onebot.core.message
 
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
