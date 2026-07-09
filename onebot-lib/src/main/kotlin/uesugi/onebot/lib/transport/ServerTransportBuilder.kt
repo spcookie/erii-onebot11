@@ -1,6 +1,7 @@
 package uesugi.onebot.lib.transport
 
 import uesugi.onebot.core.config.OneBotConfig
+import uesugi.onebot.core.model.LifecycleMetaEvent
 import uesugi.onebot.core.model.OneBotActionParams
 import uesugi.onebot.core.model.OneBotActionResult
 import uesugi.onebot.core.transport.Connection
@@ -35,7 +36,7 @@ class ServerTransportBuilder(
         if (config.wsForwardServerEnable) {
             connection.eventPushChannel = WsForwardServer(config, actionHandler, onConnect = {
                 connection.pushEvent(
-                    uesugi.onebot.core.model.LifecycleMetaEvent(
+                    LifecycleMetaEvent(
                         time = System.currentTimeMillis() / 1000,
                         selfId = config.selfId,
                         subType = "connect"
