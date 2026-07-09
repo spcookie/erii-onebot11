@@ -36,6 +36,10 @@ fun OneBotServer.onCanSendRecord(handler: suspend (JsonObject) -> OneBotActionRe
     onAction(ActionName.CAN_SEND_RECORD, handler)
 }
 
+fun OneBotServer.onCanSendMarkdown(handler: suspend (JsonObject) -> OneBotActionResult) {
+    onAction(ActionName.CAN_MARKDOWN, handler)
+}
+
 // ===== 系统 API =====
 
 fun OneBotServer.onGetStatus(handler: suspend (JsonObject) -> OneBotActionResult) {

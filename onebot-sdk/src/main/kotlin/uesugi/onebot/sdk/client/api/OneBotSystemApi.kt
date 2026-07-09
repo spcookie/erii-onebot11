@@ -16,6 +16,11 @@ suspend fun OneBotClient.canSendRecord(): Boolean {
     return (result as CanSendResult).yes
 }
 
+suspend fun OneBotClient.canSendMarkdown(): Boolean {
+    val result = call(ActionName.CAN_MARKDOWN, JsonObject(emptyMap()))
+    return (result as CanSendResult).yes
+}
+
 suspend fun OneBotClient.getStatus(): StatusInfo {
     return call(ActionName.GET_STATUS, JsonObject(emptyMap())) as StatusInfo
 }

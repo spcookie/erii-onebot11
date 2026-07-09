@@ -292,6 +292,8 @@ class MockActionDispatcher(
 
         server.onCanSendRecord { CanSendResult(true) }
 
+        server.onCanSendMarkdown { CanSendResult(true) }
+
         server.onGetStatus {
             StatusInfo(online = true, good = true)
         }

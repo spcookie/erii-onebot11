@@ -13,6 +13,7 @@ object ActionName {
     const val GET_MSG = "get_msg"
     const val GET_FORWARD_MSG = "get_forward_msg"
     const val SEND_LIKE = "send_like"
+    const val CAN_MARKDOWN = "can_markdown"
 
     // ===== 群管理 =====
     const val SET_GROUP_KICK = "set_group_kick"
