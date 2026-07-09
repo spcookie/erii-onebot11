@@ -13,7 +13,6 @@ import uesugi.onebot.sdk.client.OneBotClient
 import uesugi.onebot.sdk.client.api.getMsg
 import uesugi.onebot.sdk.client.api.sendGroupMsg
 import uesugi.onebot.sdk.client.api.sendPrivateMsg
-import java.awt.SystemColor.text
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -58,11 +57,11 @@ class WsForwardIntegrationTest {
         delay(1000)
 
         try {
-            val msgId = client.sendPrivateMsg(10086, listOf(text("hello via ws")))
+            val msgId = client.sendPrivateMsg(10086, listOf(textSegment("hello via ws")))
             assertTrue(msgId > 0, "WS API call should return valid message_id")
 
             val eventCaptured = captureEvent<PrivateMessageEvent>(client)
-            mockBot.simulatePrivateMessage(10086, listOf(text("ws event test")))
+            mockBot.simulatePrivateMessage(10086, listOf(textSegment("ws event test")))
             val event = withTimeout(5000) { eventCaptured.await() }
             assertEquals(10086, event.userId)
             assertTrue(event.message.any { it.data["text"]?.jsonPrimitive?.content?.contains("ws event test") == true })
@@ -164,9 +163,9 @@ class WsForwardIntegrationTest {
         try {
             val msgId = client.sendGroupMsg(
                 12345, listOf(
-                    text("Hello "),
-                    at(10086),
-                    text(" via WebSocket")
+                    textSegment("Hello "),
+                    atSegment(10086),
+                    textSegment(" via WebSocket")
                 )
             )
             assertTrue(msgId > 0)

@@ -2,7 +2,6 @@ package uesugi.onebot.core.model
 
 import kotlinx.serialization.json.*
 import uesugi.onebot.core.transport.JsonFactory
-import java.awt.SystemColor.text
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -15,7 +14,7 @@ class SerializationTest {
 
     @Test
     fun `serialize MessageSegment with snakeCase naming`() {
-        val segment = text("Hello World")
+        val segment = textSegment("Hello World")
         val encoded = json.encodeToString(MessageSegment.serializer(), segment)
         val decoded: MessageSegment = json.decodeFromString(MessageSegment.serializer(), encoded)
 
@@ -25,7 +24,7 @@ class SerializationTest {
 
     @Test
     fun `serialize at segment`() {
-        val segment = at(123456789L)
+        val segment = atSegment(123456789L)
         val encoded = json.encodeToString(MessageSegment.serializer(), segment)
         assertNotNull(encoded)
         val decoded: MessageSegment = json.decodeFromString(MessageSegment.serializer(), encoded)
@@ -36,7 +35,7 @@ class SerializationTest {
 
     @Test
     fun `serialize reply segment`() {
-        val segment = reply(42L)
+        val segment = replySegment(42L)
         val encoded = json.encodeToString(MessageSegment.serializer(), segment)
 
         val decoded: MessageSegment = json.decodeFromString(MessageSegment.serializer(), encoded)
@@ -46,8 +45,8 @@ class SerializationTest {
 
     @Test
     fun `serialize image segment with optional url`() {
-        val withUrl = image("file.jpg", url = "http://example.com/img.jpg")
-        val withoutUrl = image("file.jpg")
+        val withUrl = imageSegment("file.jpg", url = "http://example.com/img.jpg")
+        val withoutUrl = imageSegment("file.jpg")
 
         val encodedWith = json.encodeToString(MessageSegment.serializer(), withUrl)
         val encodedWithout = json.encodeToString(MessageSegment.serializer(), withoutUrl)
@@ -100,7 +99,7 @@ class SerializationTest {
             subType = "friend",
             messageId = 12345,
             userId = 987654321L,
-            message = listOf(text("hello")),
+            message = listOf(textSegment("hello")),
             rawMessage = "hello",
             sender = Sender(987654321L, "User")
         )
@@ -467,21 +466,21 @@ class SerializationTest {
 
     @Test
     fun `textSegment factory`() {
-        val seg = text("hello")
+        val seg = textSegment("hello")
         assertEquals("text", seg.type)
         assertEquals("hello", seg.data["text"]?.jsonPrimitive?.content)
     }
 
     @Test
     fun `atSegment factory`() {
-        val seg = at(12345L)
+        val seg = atSegment(12345L)
         assertEquals("at", seg.type)
         assertEquals("12345", seg.data["qq"]?.jsonPrimitive?.content)
     }
 
     @Test
     fun `imageSegment factory with optional url`() {
-        val seg = image("img.jpg")
+        val seg = imageSegment("img.jpg")
         assertEquals("image", seg.type)
         assertEquals("img.jpg", seg.data["file"]?.jsonPrimitive?.content)
         assertEquals(null, seg.data["url"])
@@ -489,21 +488,21 @@ class SerializationTest {
 
     @Test
     fun `faceSegment factory`() {
-        val seg = face("1")
+        val seg = faceSegment("1")
         assertEquals("face", seg.type)
         assertEquals("1", seg.data["id"]?.jsonPrimitive?.content)
     }
 
     @Test
     fun `recordSegment factory`() {
-        val seg = record("audio.mp3")
+        val seg = recordSegment("audio.mp3")
         assertEquals("record", seg.type)
         assertEquals("audio.mp3", seg.data["file"]?.jsonPrimitive?.content)
     }
 
     @Test
     fun `videoSegment factory`() {
-        val seg = video("video.mp4")
+        val seg = videoSegment("video.mp4")
         assertEquals("video", seg.type)
         assertEquals("video.mp4", seg.data["file"]?.jsonPrimitive?.content)
     }

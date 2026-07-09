@@ -14,7 +14,6 @@ import uesugi.onebot.sdk.client.OneBotClient
 import uesugi.onebot.sdk.client.api.getMsg
 import uesugi.onebot.sdk.client.api.sendGroupMsg
 import uesugi.onebot.sdk.client.api.sendPrivateMsg
-import java.awt.SystemColor.text
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -83,7 +82,7 @@ class MessageSegmentIntegrationTest {
         val (mockBot, client, cleanup) = setup()
         try {
             val captured = captureEvent<PrivateMessageEvent>(client)
-            mockBot.simulatePrivateMessage(10086, listOf(text("plain text message")))
+            mockBot.simulatePrivateMessage(10086, listOf(textSegment("plain text message")))
             val event = withTimeout(3000) { captured.await() }
             assertEquals(1, event.message.size)
             assertEquals("text", event.message[0].type)
@@ -97,7 +96,7 @@ class MessageSegmentIntegrationTest {
     fun testFaceSegment() = runBlocking {
         val (_, client, cleanup) = setup()
         try {
-            val msgId = client.sendPrivateMsg(10086, listOf(face("178")))
+            val msgId = client.sendPrivateMsg(10086, listOf(faceSegment("178")))
             assertTrue(msgId > 0)
             val msg = client.getMsg(msgId)
             assertNotNull(msg)
@@ -114,7 +113,7 @@ class MessageSegmentIntegrationTest {
         val (mockBot, client, cleanup) = setup()
         try {
             val captured = captureEvent<GroupMessageEvent>(client)
-            mockBot.simulateGroupMessage(12345, 10086, listOf(text("@someone hello")))
+            mockBot.simulateGroupMessage(12345, 10086, listOf(textSegment("@someone hello")))
             val event = withTimeout(3000) { captured.await() }
             assertTrue(event.message.any { it.type == "text" })
         } finally {
@@ -129,7 +128,7 @@ class MessageSegmentIntegrationTest {
             val msgId = client.sendGroupMsg(
                 12345, listOf(
                     MessageSegment("at", mapOf("qq" to JsonPrimitive("all"))),
-                    text(" everyone")
+                    textSegment(" everyone")
                 )
             )
             assertTrue(msgId > 0)
@@ -144,7 +143,7 @@ class MessageSegmentIntegrationTest {
         try {
             val msgId = client.sendPrivateMsg(
                 10086, listOf(
-                    image("https://example.com/img.jpg")
+                    imageSegment("https://example.com/img.jpg")
                 )
             )
             assertTrue(msgId > 0)
@@ -165,7 +164,7 @@ class MessageSegmentIntegrationTest {
             try {
                 val msgId = client.sendPrivateMsg(
                     10086, listOf(
-                        record("https://example.com/audio.mp3")
+                        recordSegment("https://example.com/audio.mp3")
                     )
                 )
                 assertTrue(msgId > 0)
@@ -186,7 +185,7 @@ class MessageSegmentIntegrationTest {
             try {
                 val msgId = client.sendPrivateMsg(
                     10086, listOf(
-                        video("https://example.com/video.mp4")
+                        videoSegment("https://example.com/video.mp4")
                     )
                 )
                 assertTrue(msgId > 0)
@@ -205,7 +204,7 @@ class MessageSegmentIntegrationTest {
         runBlocking {
             val (_, client, cleanup) = setup()
             try {
-                val msgId = client.sendPrivateMsg(10086, listOf(rps()))
+                val msgId = client.sendPrivateMsg(10086, listOf(rpsSegment()))
                 assertTrue(msgId > 0)
                 val msg = client.getMsg(msgId)
                 val rps = msg?.message?.find { it.type == "rps" }
@@ -221,7 +220,7 @@ class MessageSegmentIntegrationTest {
         runBlocking {
             val (_, client, cleanup) = setup()
             try {
-                val msgId = client.sendPrivateMsg(10086, listOf(dice()))
+                val msgId = client.sendPrivateMsg(10086, listOf(diceSegment()))
                 assertTrue(msgId > 0)
                 val msg = client.getMsg(msgId)
                 val dice = msg?.message?.find { it.type == "dice" }
@@ -236,7 +235,7 @@ class MessageSegmentIntegrationTest {
     fun testShakeSegment() = runBlocking {
         val (_, client, cleanup) = setup()
         try {
-            val msgId = client.sendPrivateMsg(10086, listOf(shake()))
+            val msgId = client.sendPrivateMsg(10086, listOf(shakeSegment()))
             assertTrue(msgId > 0)
         } finally {
             cleanup()
@@ -248,7 +247,7 @@ class MessageSegmentIntegrationTest {
         runBlocking {
             val (_, client, cleanup) = setup()
             try {
-                val msgId = client.sendPrivateMsg(10086, listOf(poke("1", "-1")))
+                val msgId = client.sendPrivateMsg(10086, listOf(pokeSegment("1", "-1")))
                 assertTrue(msgId > 0)
                 val msg = client.getMsg(msgId)
                 val poke = msg?.message?.find { it.type == "poke" }
@@ -265,7 +264,7 @@ class MessageSegmentIntegrationTest {
         try {
             val msgId = client.sendPrivateMsg(
                 10086, listOf(
-                    share("https://example.com", "Title", "Content", "https://example.com/img.jpg")
+                    shareSegment("https://example.com", "Title", "Content", "https://example.com/img.jpg")
                 )
             )
             assertTrue(msgId > 0)
@@ -283,7 +282,7 @@ class MessageSegmentIntegrationTest {
     fun testContactSegment() = runBlocking {
         val (_, client, cleanup) = setup()
         try {
-            val msgId = client.sendPrivateMsg(10086, listOf(contact("qq", 10087)))
+            val msgId = client.sendPrivateMsg(10086, listOf(contactSegment("qq", 10087)))
             assertTrue(msgId > 0)
             val msg = client.getMsg(msgId)
             val contact = msg?.message?.find { it.type == "contact" }
@@ -300,7 +299,7 @@ class MessageSegmentIntegrationTest {
         try {
             val msgId = client.sendPrivateMsg(
                 10086, listOf(
-                    location(39.9042, 116.4074, "Beijing", "Capital of China")
+                    locationSegment(39.9042, 116.4074, "Beijing", "Capital of China")
                 )
             )
             assertTrue(msgId > 0)
@@ -320,7 +319,7 @@ class MessageSegmentIntegrationTest {
         try {
             val msgId = client.sendPrivateMsg(
                 10086, listOf(
-                    music("163", "123456")
+                    musicSegment("163", "123456")
                 )
             )
             assertTrue(msgId > 0)
@@ -339,7 +338,7 @@ class MessageSegmentIntegrationTest {
         try {
             val msgId = client.sendPrivateMsg(
                 10086, listOf(
-                    music(
+                    musicSegment(
                         "custom", url = "https://example.com/music.mp3",
                         audio = "https://example.com/music.mp3",
                         title = "Custom Song", content = "Artist"
@@ -358,8 +357,8 @@ class MessageSegmentIntegrationTest {
         try {
             val msgId = client.sendPrivateMsg(
                 10086, listOf(
-                    reply(42),
-                    text("reply text")
+                    replySegment(42),
+                    textSegment("reply text")
                 )
             )
             assertTrue(msgId > 0)
@@ -376,7 +375,7 @@ class MessageSegmentIntegrationTest {
     fun testForwardSegment() = runBlocking {
         val (_, client, cleanup) = setup()
         try {
-            val msgId = client.sendPrivateMsg(10086, listOf(forward("merge_123")))
+            val msgId = client.sendPrivateMsg(10086, listOf(forwardSegment("merge_123")))
             assertTrue(msgId > 0)
         } finally {
             cleanup()
@@ -387,7 +386,7 @@ class MessageSegmentIntegrationTest {
     fun testNodeSegment() = runBlocking {
         val (_, client, cleanup) = setup()
         try {
-            val msgId = client.sendPrivateMsg(10086, listOf(node("12345")))
+            val msgId = client.sendPrivateMsg(10086, listOf(nodeSegment("12345")))
             assertTrue(msgId > 0)
         } finally {
             cleanup()
@@ -400,7 +399,7 @@ class MessageSegmentIntegrationTest {
         try {
             val msgId = client.sendPrivateMsg(
                 10086, listOf(
-                    xml("<msg><text>hello</text></msg>")
+                    xmlSegment("<msg><text>hello</text></msg>")
                 )
             )
             assertTrue(msgId > 0)
@@ -419,7 +418,7 @@ class MessageSegmentIntegrationTest {
         try {
             val msgId = client.sendPrivateMsg(
                 10086, listOf(
-                    json("""{"app":"com.example"}""")
+                    jsonSegment("""{"app":"com.example"}""")
                 )
             )
             assertTrue(msgId > 0)
@@ -437,12 +436,12 @@ class MessageSegmentIntegrationTest {
         val (_, client, cleanup) = setup()
         try {
             val segments = listOf(
-                text("Hello "),
-                face("178"),
-                text(" check this: "),
-                image("https://example.com/img.jpg"),
-                text(" and reply to "),
-                at(10087)
+                textSegment("Hello "),
+                faceSegment("178"),
+                textSegment(" check this: "),
+                imageSegment("https://example.com/img.jpg"),
+                textSegment(" and reply to "),
+                atSegment(10087)
             )
             val msgId = client.sendGroupMsg(12345, segments)
             assertTrue(msgId > 0)

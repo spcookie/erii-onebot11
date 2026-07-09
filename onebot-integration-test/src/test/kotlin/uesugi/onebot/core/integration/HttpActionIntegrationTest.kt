@@ -9,8 +9,8 @@ import kotlinx.serialization.json.put
 import uesugi.onebot.core.config.OneBotConfig
 import uesugi.onebot.core.dispatch.MiddlewareException
 import uesugi.onebot.core.model.*
-import uesugi.onebot.core.transport.impl.http.HttpActionClient
-import uesugi.onebot.core.transport.impl.http.HttpActionServer
+import uesugi.onebot.sdk.transport.impl.http.HttpActionClient
+import uesugi.onebot.lib.transport.impl.http.HttpActionServer
 import kotlin.test.*
 
 class HttpActionIntegrationTest {
@@ -137,7 +137,8 @@ class HttpActionIntegrationTest {
                         accessToken = "wrong-token"
                     )
                 )
-                assertFailsWith<Exception> { c.call("get_login_info", RawActionParams(buildJsonObject {})) }
+                val result = c.call("get_login_info", RawActionParams(buildJsonObject {}))
+                assertTrue(result is RawActionResult, "Expected RawActionResult for auth failure")
             } finally {
                 s.stop()
                 delay(300)

@@ -12,9 +12,9 @@ import kotlinx.serialization.json.Json
 import uesugi.onebot.core.config.OneBotConfig
 import uesugi.onebot.core.model.ActionResponse
 import uesugi.onebot.core.model.RawActionResult
-import uesugi.onebot.core.transport.impl.http.HttpActionServer
-import uesugi.onebot.core.transport.impl.ws.WsForwardServer
-import uesugi.onebot.core.transport.impl.ws.WsReverseServer
+import uesugi.onebot.lib.transport.impl.http.HttpActionServer
+import uesugi.onebot.lib.transport.impl.ws.WsForwardServer
+import uesugi.onebot.sdk.transport.impl.ws.WsReverseServer
 import uesugi.onebot.core.util.EchoTracker
 import kotlin.test.Test
 import kotlin.test.assertEquals

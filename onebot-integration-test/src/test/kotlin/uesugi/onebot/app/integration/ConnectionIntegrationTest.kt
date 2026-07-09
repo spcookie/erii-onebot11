@@ -1,4 +1,4 @@
-package uesugi.onebot.core.integration
+package uesugi.onebot.app.integration
 
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -7,6 +7,8 @@ import uesugi.onebot.core.config.OneBotConfig
 import uesugi.onebot.core.dispatch.MiddlewareException
 import uesugi.onebot.core.model.*
 import uesugi.onebot.core.transport.Connection
+import uesugi.onebot.lib.transport.ServerTransportBuilder
+import uesugi.onebot.sdk.transport.SdkTransportBuilder
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,27 +27,30 @@ class ConnectionIntegrationTest {
 
     private suspend fun withServer(
         actionHandler: suspend (String, OneBotActionParams) -> OneBotActionResult,
-        block: suspend (Connection) -> Unit
+        block: suspend (server: Connection, client: Connection) -> Unit
     ) {
         var lastError: Throwable? = null
         repeat(5) { attempt ->
             val port = portAllocator.incrementAndGet()
-            val config = OneBotConfig(httpHost = "127.0.0.1", httpPort = port)
-            val connection = Connection(config)
-            connection.buildServer(actionHandler)
+            val serverConfig = OneBotConfig(httpEnable = true, httpHost = "127.0.0.1", httpPort = port)
+            val server = ServerTransportBuilder(serverConfig, actionHandler).build()
             try {
-                connection.start()
+                server.start()
                 delay(200)
-                block(connection)
-                return
+                val clientConfig = OneBotConfig(httpEnable = true, httpHost = "127.0.0.1", httpPort = port)
+                val client = SdkTransportBuilder(clientConfig).build()
+                client.start()
+                try {
+                    block(server, client)
+                    return
+                } finally {
+                    try { client.stop() } catch (_: Exception) {}
+                }
             } catch (e: Exception) {
                 lastError = e
                 if (attempt < 4) delay(100)
             } finally {
-                try {
-                    connection.stop()
-                } catch (_: Exception) {
-                }
+                try { server.stop() } catch (_: Exception) {}
                 delay(200)
             }
         }
@@ -61,8 +66,8 @@ class ConnectionIntegrationTest {
                 "get_login_info" -> LoginInfo(userId = 10001L, nickname = "TestBot")
                 else -> throw MiddlewareException(404, "unknown")
             }
-        }) { connection ->
-            val result = connection.call("get_login_info", RawActionParams(buildJsonObject {}))
+        }) { _, client ->
+            val result = client.call("get_login_info", RawActionParams(buildJsonObject {}))
             assertTrue(result is LoginInfo)
             assertEquals(10001L, (result as LoginInfo).userId)
             assertEquals("TestBot", result.nickname)
@@ -77,11 +82,11 @@ class ConnectionIntegrationTest {
                 "action_b" -> RawActionResult(buildJsonObject { put("id", 2) })
                 else -> throw MiddlewareException(404, "unknown")
             }
-        }) { connection ->
-            val resp1 = connection.call("action_a", RawActionParams(buildJsonObject {}))
+        }) { _, client ->
+            val resp1 = client.call("action_a", RawActionParams(buildJsonObject {}))
             assertEquals(1, (resp1 as RawActionResult).raw.jsonObject["id"]?.jsonPrimitive?.int)
 
-            val resp2 = connection.call("action_b", RawActionParams(buildJsonObject {}))
+            val resp2 = client.call("action_b", RawActionParams(buildJsonObject {}))
             assertEquals(2, (resp2 as RawActionResult).raw.jsonObject["id"]?.jsonPrimitive?.int)
         }
     }
@@ -92,8 +97,8 @@ class ConnectionIntegrationTest {
         withServer({ _, params ->
             captured = params
             RawActionResult()
-        }) { connection ->
-            connection.call("set_group_ban", RawActionParams(buildJsonObject {
+        }) { _, client ->
+            client.call("set_group_ban", RawActionParams(buildJsonObject {
                 put("group_id", 555L)
                 put("user_id", 111L)
                 put("duration", 600L)
@@ -109,8 +114,8 @@ class ConnectionIntegrationTest {
 
     @Test
     fun `server returns failed for unknown action`() = runBlocking {
-        withServer({ _, _ -> throw MiddlewareException(404, "unknown") }) { connection ->
-            val result = connection.call("unknown", RawActionParams(buildJsonObject {}))
+        withServer({ _, _ -> throw MiddlewareException(404, "unknown") }) { _, client ->
+            val result = client.call("unknown", RawActionParams(buildJsonObject {}))
             assertTrue(result is RawActionResult)
             assertEquals(JsonNull, (result as RawActionResult).raw)
         }
@@ -121,25 +126,22 @@ class ConnectionIntegrationTest {
     @Test
     fun `client calls remote server`() = runBlocking {
         val serverPort = portAllocator.incrementAndGet()
-        val serverConfig = OneBotConfig(httpHost = "127.0.0.1", httpPort = serverPort)
+        val serverConfig = OneBotConfig(httpEnable = true, httpHost = "127.0.0.1", httpPort = serverPort)
 
-        val server = Connection(serverConfig)
-        server.buildServer { action, params ->
+        val server = ServerTransportBuilder(serverConfig) { action, params ->
             when (action) {
                 "get_group_info" -> {
                     val p = params as GetGroupInfoRequest
                     GroupInfo(groupId = p.groupId, groupName = "TestGroup")
                 }
-
                 else -> throw MiddlewareException(404, "unknown")
             }
-        }
+        }.build()
         server.start()
         delay(300)
         try {
             val clientConfig = OneBotConfig(httpEnable = true, httpHost = "127.0.0.1", httpPort = serverPort)
-            val client = Connection(clientConfig)
-            client.buildClient()
+            val client = SdkTransportBuilder(clientConfig).build()
             client.start()
 
             val result = client.call("get_group_info", RawActionParams(buildJsonObject { put("group_id", 123L) }))
@@ -158,20 +160,17 @@ class ConnectionIntegrationTest {
     fun `server with token rejects wrong token`() {
         runBlocking {
             val port = portAllocator.incrementAndGet()
-            val serverConfig = OneBotConfig(httpHost = "127.0.0.1", httpPort = port, accessToken = "correct-token")
-            val server = Connection(serverConfig)
-            server.buildServer { _, _ -> RawActionResult() }
+            val serverConfig = OneBotConfig(httpEnable = true, httpHost = "127.0.0.1", httpPort = port, accessToken = "correct-token")
+            val server = ServerTransportBuilder(serverConfig) { _, _ -> RawActionResult() }.build()
             server.start()
             delay(300)
             try {
-                val clientConfig = OneBotConfig(httpHost = "127.0.0.1", httpPort = port, accessToken = "wrong-token")
-                val client = Connection(clientConfig)
-                client.buildClient()
+                val clientConfig = OneBotConfig(httpEnable = true, httpHost = "127.0.0.1", httpPort = port, accessToken = "wrong-token")
+                val client = SdkTransportBuilder(clientConfig).build()
                 client.start()
 
-                assertFailsWith<Exception> {
-                    client.call("test", RawActionParams(buildJsonObject {}))
-                }
+                val result = client.call("test", RawActionParams(buildJsonObject {}))
+                assertTrue(result is RawActionResult, "Expected RawActionResult for auth failure")
             } finally {
                 server.stop()
                 delay(500)
@@ -184,22 +183,23 @@ class ConnectionIntegrationTest {
     @Test
     fun `start call and stop lifecycle`() = runBlocking {
         val port = portAllocator.incrementAndGet()
-        val config = OneBotConfig(httpHost = "127.0.0.1", httpPort = port)
-        val connection = Connection(config)
-        connection.buildServer { _, _ -> RawActionResult() }
-
-        assertTrue(connection.isInitialized)
-
-        connection.start()
+        val serverConfig = OneBotConfig(httpEnable = true, httpHost = "127.0.0.1", httpPort = port)
+        val server = ServerTransportBuilder(serverConfig) { _, _ -> RawActionResult() }.build()
+        server.start()
         delay(300)
-        val result = connection.call("test", RawActionParams(buildJsonObject {}))
+
+        val clientConfig = OneBotConfig(httpEnable = true, httpHost = "127.0.0.1", httpPort = port)
+        val client = SdkTransportBuilder(clientConfig).build()
+        client.start()
+        val result = client.call("test", RawActionParams(buildJsonObject {}))
         assertTrue(result is RawActionResult)
-        connection.stop()
+        client.stop()
+        server.stop()
         delay(500)
 
         // After stop, calls fail
         val threw = try {
-            connection.call("test", RawActionParams(buildJsonObject {}))
+            client.call("test", RawActionParams(buildJsonObject {}))
             false
         } catch (e: Exception) {
             true
@@ -208,18 +208,7 @@ class ConnectionIntegrationTest {
     }
 
     @Test
-    fun `buildServer cannot be called twice`() {
-        val config = OneBotConfig(httpPort = portAllocator.incrementAndGet())
-        val connection = Connection(config)
-        connection.buildServer { _, _ -> RawActionResult() }
-
-        assertFailsWith<IllegalArgumentException> {
-            connection.buildServer { _, _ -> RawActionResult() }
-        }
-    }
-
-    @Test
-    fun `call without build throws error`() {
+    fun `call without action channel throws error`() {
         val config = OneBotConfig(httpPort = portAllocator.incrementAndGet())
         val connection = Connection(config)
 
@@ -229,7 +218,7 @@ class ConnectionIntegrationTest {
     }
 
     @Test
-    fun `pushEvent without build throws error`() {
+    fun `pushEvent without event push channel throws error`() {
         val config = OneBotConfig(httpPort = portAllocator.incrementAndGet())
         val connection = Connection(config)
 

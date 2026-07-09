@@ -6,14 +6,11 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Test
 import uesugi.onebot.core.config.OneBotConfig
-import uesugi.onebot.core.model.GroupMessageEvent
-import uesugi.onebot.core.model.OneBotEvent
+import uesugi.onebot.core.model.*
 import uesugi.onebot.mock.MockBot
 import uesugi.onebot.sdk.client.OneBotClient
 import uesugi.onebot.sdk.client.api.getMsg
 import uesugi.onebot.sdk.client.api.sendGroupMsg
-import uesugi.onebot.sdk.message.text
-import java.awt.SystemColor.text
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -79,7 +76,7 @@ class MessageFormatIntegrationTest {
         val (mockBot, client, cleanup) = setupWith("array")
         try {
             val captured = captureEvent<GroupMessageEvent>(client)
-            mockBot.simulateGroupMessage(12345, 10086, listOf(text("hello array")))
+            mockBot.simulateGroupMessage(12345, 10086, listOf(textSegment("hello array")))
             val event = withTimeout(3000) { captured.await() }
             assertTrue(event.message.isNotEmpty(), "message array should not be empty")
             assertEquals("text", event.message[0].type)
@@ -93,7 +90,7 @@ class MessageFormatIntegrationTest {
         val (mockBot, client, cleanup) = setupWith("string")
         try {
             val captured = captureEvent<GroupMessageEvent>(client)
-            mockBot.simulateGroupMessage(12345, 10086, listOf(text("hello string")))
+            mockBot.simulateGroupMessage(12345, 10086, listOf(textSegment("hello string")))
             val event = withTimeout(3000) { captured.await() }
             assertTrue(event.message.isNotEmpty(), "message should be parsed to List by SDK")
             assertEquals("text", event.message[0].type)
@@ -107,7 +104,7 @@ class MessageFormatIntegrationTest {
         val (mockBot, client, cleanup) = setupWith("array")
         try {
             val captured = captureEvent<GroupMessageEvent>(client)
-            mockBot.simulateGroupMessage(12345, 10086, listOf(text("hello world")))
+            mockBot.simulateGroupMessage(12345, 10086, listOf(textSegment("hello world")))
             val event = withTimeout(3000) { captured.await() }
             assertTrue(event.rawMessage.isNotEmpty())
             assertTrue(event.rawMessage.contains("hello world"))
@@ -122,9 +119,9 @@ class MessageFormatIntegrationTest {
         try {
             val msgId = client.sendGroupMsg(
                 12345, listOf(
-                    text("mixed "),
-                    face("178"),
-                    text(" content")
+                    textSegment("mixed "),
+                    faceSegment("178"),
+                    textSegment(" content")
                 )
             )
             assertTrue(msgId > 0)
