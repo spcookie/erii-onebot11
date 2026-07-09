@@ -54,7 +54,7 @@ class EventParser(
         register("notice:group_recall", GroupRecallEvent.serializer())
         register("notice:friend_recall", FriendRecallEvent.serializer())
 
-        // notice — notify (三级 key)
+        // notice — notify
         register("notice:notify:poke", PokeEvent.serializer())
         register("notice:notify:lucky_king", LuckyKingEvent.serializer())
         register("notice:notify:honor", HonorEvent.serializer())
@@ -63,7 +63,7 @@ class EventParser(
         register("request:friend", FriendRequestEvent.serializer())
         register("request:group", GroupRequestEvent.serializer())
 
-        // message_sent (NapCat)
+        // message_sent
         register("message_sent:group", MessageSentEvent.serializer())
         register("message_sent:private", MessageSentEvent.serializer())
 
