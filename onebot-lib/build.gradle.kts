@@ -20,6 +20,20 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.ktor.serialization.kotlinx.json)
+
+    // Ktor server (HttpActionServer, WsForwardServer)
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.netty)
+    implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.server.websockets)
+    implementation(libs.ktor.server.auth)
+
+    // Ktor client (HttpEventClient, WsReverseClient)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.client.websockets)
 
     // Logging
     implementation(libs.logback.classic)

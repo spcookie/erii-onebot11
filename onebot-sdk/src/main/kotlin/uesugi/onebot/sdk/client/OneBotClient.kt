@@ -14,7 +14,7 @@ import uesugi.onebot.core.pipeline.ActionHandler
 import uesugi.onebot.core.pipeline.EventHandler
 import uesugi.onebot.core.pipeline.Middleware
 import uesugi.onebot.core.pipeline.Pipeline
-import uesugi.onebot.core.transport.Connection
+import uesugi.onebot.sdk.transport.SdkTransportBuilder
 
 /**
  * OneBot 客户端统一入口。
@@ -23,7 +23,7 @@ import uesugi.onebot.core.transport.Connection
  */
 class OneBotClient(config: OneBotConfig) {
     private val logger = LoggerFactory.getLogger(OneBotClient::class.java)
-    private val connection = Connection(config)
+    private val connection = SdkTransportBuilder(config).build()
     private val pipeline = Pipeline()
     private val registry = EventDispatcher()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -46,7 +46,6 @@ class OneBotClient(config: OneBotConfig) {
     // ===== Lifecycle =====
 
     suspend fun start() {
-        connection.buildClient()
         wrappedAction = pipeline.wrapAction { action, params ->
             connection.call(action, params)
         }

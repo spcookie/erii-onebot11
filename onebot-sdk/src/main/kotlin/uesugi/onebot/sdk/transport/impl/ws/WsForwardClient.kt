@@ -1,4 +1,4 @@
-package uesugi.onebot.core.transport.impl.ws
+package uesugi.onebot.sdk.transport.impl.ws
 
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
@@ -23,6 +23,7 @@ import uesugi.onebot.core.parser.EventParser
 import uesugi.onebot.core.transport.ActionChannel
 import uesugi.onebot.core.transport.EventChannel
 import uesugi.onebot.core.transport.JsonFactory
+import uesugi.onebot.core.transport.createQuickOpHandler
 import uesugi.onebot.core.util.EchoTracker
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -231,8 +232,9 @@ class WsForwardUniversalClient(
                                     if (resp.retcode != 0) {
                                         logger.warn("API call failed: retcode={}, echo={}", resp.retcode, resp.echo)
                                     }
-                                    if (resp.echo != null) {
-                                        echoTracker.resolve(resp.echo, resp)
+                                    val echo = resp.echo
+                                    if (echo != null) {
+                                        echoTracker.resolve(echo, resp)
                                     } else {
                                         logger.warn("Received response without echo, discarding")
                                     }

@@ -1,4 +1,4 @@
-package uesugi.onebot.core.transport.impl.ws
+package uesugi.onebot.lib.transport.impl.ws
 
 import io.ktor.server.application.*
 import io.ktor.server.engine.*

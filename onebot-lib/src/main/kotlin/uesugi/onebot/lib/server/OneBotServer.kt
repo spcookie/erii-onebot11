@@ -15,17 +15,30 @@ import uesugi.onebot.core.parser.ActionParamParser
 import uesugi.onebot.core.parser.ActionResultParser
 import uesugi.onebot.core.pipeline.Middleware
 import uesugi.onebot.core.pipeline.Pipeline
-import uesugi.onebot.core.transport.Connection
+import uesugi.onebot.lib.transport.ServerTransportBuilder
 
 class OneBotServer(config: OneBotConfig) {
     private val logger = LoggerFactory.getLogger(OneBotServer::class.java)
-    private val connection = Connection(config)
     private val pipeline = Pipeline()
     @PublishedApi
     internal val dispatcher = ActionDispatcher(config.rateLimitInterval)
     private val resultParser = ActionResultParser()
     private val paramParser = ActionParamParser(config.messageFormat)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val connection by lazy {
+        val handler = pipeline.wrapAction { action, params ->
+            try {
+                dispatcher.dispatch(action, params)
+            } catch (e: ActionNotFoundException) {
+                throw e
+            } catch (e: MiddlewareException) {
+                throw e
+            }
+        }
+        ServerTransportBuilder(config) { action, params ->
+            handler(action, params)
+        }.build()
+    }
 
     /** 注册 raw handler（接收 JsonObject，返回 OneBotActionResult） */
     @JvmName("onActionRaw")
@@ -71,18 +84,6 @@ class OneBotServer(config: OneBotConfig) {
 
     suspend fun start() {
         dispatcher.setScope(scope)
-        val handler = pipeline.wrapAction { action, params ->
-            dispatcher.dispatch(action, params)
-        }
-        connection.buildServer { action, params ->
-            try {
-                handler(action, params)
-            } catch (e: ActionNotFoundException) {
-                throw e
-            } catch (e: MiddlewareException) {
-                throw e
-            }
-        }
         connection.start()
         logger.info("OneBotServer started")
     }

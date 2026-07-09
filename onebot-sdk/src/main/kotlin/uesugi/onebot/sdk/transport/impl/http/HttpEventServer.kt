@@ -1,4 +1,4 @@
-package uesugi.onebot.core.transport.impl.http
+package uesugi.onebot.sdk.transport.impl.http
 
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -62,9 +62,10 @@ class HttpEventServer(
 
     private suspend fun handleEventPost(call: ApplicationCall) {
         val body = call.receiveText()
-        if (!config.secret.isNullOrBlank()) {
+        val secret = config.secret
+        if (!secret.isNullOrBlank()) {
             val sig = call.request.header("X-Signature")
-            if (!Signing.verifySign(body, sig, config.secret)) {
+            if (!Signing.verifySign(body, sig, secret)) {
                 call.respond(HttpStatusCode.Forbidden)
                 return
             }

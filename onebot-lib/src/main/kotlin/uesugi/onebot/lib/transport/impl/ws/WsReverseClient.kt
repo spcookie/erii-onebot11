@@ -1,4 +1,4 @@
-package uesugi.onebot.core.transport.impl.ws
+package uesugi.onebot.lib.transport.impl.ws
 
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
@@ -19,6 +19,7 @@ import uesugi.onebot.core.parser.EventParser
 import uesugi.onebot.core.transport.ActionServerChannel
 import uesugi.onebot.core.transport.EventPushChannel
 import uesugi.onebot.core.transport.JsonFactory
+import uesugi.onebot.core.transport.handleActionRequest
 import kotlin.time.Duration.Companion.milliseconds
 
 // ===== 反向 WS 客户端（实现侧，OneBot 实现作为 WS 客户端连接 SDK 服务器）=====

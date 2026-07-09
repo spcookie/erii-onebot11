@@ -1,4 +1,4 @@
-package uesugi.onebot.core.transport.impl.http
+package uesugi.onebot.sdk.transport.impl.http
 
 import io.ktor.client.*
 import io.ktor.client.request.*

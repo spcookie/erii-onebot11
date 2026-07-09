@@ -1,4 +1,4 @@
-package uesugi.onebot.core.transport.impl.ws
+package uesugi.onebot.sdk.transport.impl.ws
 
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
@@ -210,8 +210,9 @@ class WsReverseServer(
                                         resp.echo
                                     )
                                 }
-                                if (resp.echo != null) {
-                                    echoTracker.resolve(resp.echo, resp)
+                                val echo = resp.echo
+                                if (echo != null) {
+                                    echoTracker.resolve(echo, resp)
                                 } else {
                                     logger.warn("Received response without echo, discarding")
                                 }

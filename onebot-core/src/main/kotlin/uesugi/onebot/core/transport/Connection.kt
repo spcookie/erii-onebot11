@@ -6,19 +6,18 @@ import kotlinx.coroutines.flow.emptyFlow
 import org.slf4j.LoggerFactory
 import uesugi.onebot.core.config.OneBotConfig
 import uesugi.onebot.core.model.*
-import uesugi.onebot.core.transport.impl.http.HttpActionClient
-import uesugi.onebot.core.transport.impl.http.HttpActionServer
-import uesugi.onebot.core.transport.impl.http.HttpEventClient
-import uesugi.onebot.core.transport.impl.http.HttpEventServer
-import uesugi.onebot.core.transport.impl.ws.*
 import uesugi.onebot.core.util.EchoTracker
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * 传输连接统一 Facade。
  *
- * 根据 [OneBotConfig] 组装正确的 Action 和 Event 传输通道组合。
- * 支持以下几种模式：
+ * 通过 setter 注入具体通道实现，负责生命周期管理。
+ * 构建逻辑由各模块的 TransportBuilder 负责：
+ * - [SdkTransportBuilder]（onebot-sdk）：组装 SDK 端通道
+ * - [ServerTransportBuilder]（onebot-lib）：组装服务端通道
+ *
+ * 支持以下模式：
  *
  * **SDK 端（客户端）模式：**
  * - HTTP：HttpActionClient（Action）+ 可选的 HttpEventServer（Event 接收）
@@ -33,12 +32,20 @@ import kotlin.time.Duration.Companion.milliseconds
 class Connection(private val config: OneBotConfig) {
 
     private val logger = LoggerFactory.getLogger(Connection::class.java)
-    private var actionServer: ActionServerChannel? = null
-    private var actionClient: ActionChannel? = null
-    private var eventChannel: EventChannel? = null
-    private var eventPushChannel: EventPushChannel? = null
     private val echoTracker = EchoTracker()
-    private var initialized = false
+
+    /** Action 调用通道（SDK 侧）。 */
+    var actionChannel: ActionChannel? = null
+
+    /** Action 接收通道（服务端侧）。 */
+    var actionServerChannel: ActionServerChannel? = null
+
+    /** 事件接收通道（SDK 侧）。 */
+    var eventChannel: EventChannel? = null
+
+    /** 事件推送通道（服务端侧）。 */
+    var eventPushChannel: EventPushChannel? = null
+
     private val serverScope = CoroutineScope(
         Dispatchers.IO + SupervisorJob() + CoroutineExceptionHandler { _, e ->
             logger.error("Connection serverScope coroutine error", e)
@@ -46,90 +53,14 @@ class Connection(private val config: OneBotConfig) {
     )
     private var heartbeatJob: Job? = null
 
-    // ===== SDK 端构建方法 =====
-
-    fun buildClient() {
-        require(!initialized) { "Connection already initialized" }
-
-        if (config.httpEnable) {
-            actionClient = HttpActionClient(config)
-        }
-
-        if (config.httpPostEnable) {
-            eventChannel = HttpEventServer(config)
-        }
-
-        if (config.wsForwardClientEnable) {
-            if (config.wsForwardClientUseUniversal) {
-                val universal = WsForwardUniversalClient(config, echoTracker)
-                actionClient = universal
-                eventChannel = universal
-            } else {
-                val apiClient = WsForwardApiClient(config, echoTracker)
-                actionClient = apiClient
-                val eventClient = WsForwardEventClient(config, actionHandler = { action, params ->
-                    apiClient.call(action, params)
-                })
-                if (config.wsForwardClientEventUrl != null || config.wsForwardClientUrl != null) {
-                    eventChannel = eventClient
-                }
-            }
-        }
-
-        // 反向 WS 服务端（SDK 作为 WS 服务器，OneBot 实现连接过来）
-        if (config.wsReverseServerEnable) {
-            val server = WsReverseServer(config, echoTracker)
-            if (actionClient == null) actionClient = server
-            if (eventChannel == null) eventChannel = server
-        }
-        initialized = true
-    }
-
-    // ===== 服务端构建方法 =====
-
-    fun buildServer(actionHandler: suspend (String, OneBotActionParams) -> OneBotActionResult) {
-        require(!initialized) { "Connection already initialized" }
-
-        if (config.httpEnable) {
-            actionServer = HttpActionServer(config, actionHandler = actionHandler)
-        }
-
-        if (config.httpPostEnable && config.httpPostUrl != null) {
-            eventPushChannel = HttpEventClient(config)
-        }
-
-        if (config.wsForwardServerEnable) {
-            eventPushChannel = WsForwardServer(config, actionHandler, onConnect = {
-                pushLifecycleEvent("connect")
-            })
-        }
-
-        // 反向 WS 客户端（实现侧，OneBot 实现作为 WS 客户端连接 SDK 服务器）
-        if (config.wsReverseClientEnable) {
-            if (config.wsReverseClientUseUniversal) {
-                val universal = WsReverseUniversalClient(config, actionHandler)
-                actionServer = universal
-                eventPushChannel = universal
-            } else {
-                if (config.wsReverseClientApiUrl != null || config.wsReverseClientUrl != null) {
-                    actionServer = WsReverseActionClient(config, actionHandler)
-                }
-                if (config.wsReverseClientEventUrl != null || config.wsReverseClientUrl != null) {
-                    eventPushChannel = WsReverseEventClient(config)
-                }
-            }
-        }
-        initialized = true
-    }
-
-    // ===== Action 调用 =====
+    // ===== Action 调用（SDK 端） =====
 
     suspend fun call(action: String, params: OneBotActionParams): OneBotActionResult {
-        val client = actionClient ?: error("No ActionChannel configured. Call buildClient() or buildServer() first.")
+        val client = actionChannel ?: error("No ActionChannel configured")
         return client.call(action, params)
     }
 
-    // ===== Event 流（SDK 端） =====
+    // ===== Event 接收（SDK 端） =====
 
     /** 事件流（SDK 端从 OneBot 实现接收事件） */
     val events: Flow<OneBotEvent>
@@ -140,7 +71,7 @@ class Connection(private val config: OneBotConfig) {
     /** 推送事件（服务端向 SDK 推送事件） */
     suspend fun pushEvent(event: OneBotEvent) {
         eventPushChannel?.pushEvent(event)
-            ?: error("No EventPushChannel configured. Call buildServer() first.")
+            ?: error("No EventPushChannel configured")
     }
 
     // ===== 生命周期 =====
@@ -149,8 +80,8 @@ class Connection(private val config: OneBotConfig) {
     suspend fun start() {
         coroutineScope {
             val started = mutableSetOf<Any>()
-            actionServer?.let { channel -> if (started.add(channel)) launch { channel.start() } }
-            actionClient?.let { channel -> if (started.add(channel)) launch { channel.start() } }
+            actionServerChannel?.let { channel -> if (started.add(channel)) launch { channel.start() } }
+            actionChannel?.let { channel -> if (started.add(channel)) launch { channel.start() } }
             eventChannel?.let { channel -> if (started.add(channel)) launch { channel.start() } }
             eventPushChannel?.let { channel -> if (started.add(channel)) launch { channel.start() } }
         }
@@ -194,8 +125,8 @@ class Connection(private val config: OneBotConfig) {
 
         echoTracker.cancelAll()
         coroutineScope {
-            actionServer?.let { launch { it.stop() } }
-            actionClient?.let { launch { it.stop() } }
+            actionServerChannel?.let { launch { it.stop() } }
+            actionChannel?.let { launch { it.stop() } }
             eventChannel?.let { launch { it.stop() } }
             eventPushChannel?.let { launch { it.stop() } }
         }
@@ -214,6 +145,4 @@ class Connection(private val config: OneBotConfig) {
             logger.warn("Failed to push lifecycle event {}: {}", subType, e.message)
         }
     }
-
-    val isInitialized: Boolean get() = initialized
 }
