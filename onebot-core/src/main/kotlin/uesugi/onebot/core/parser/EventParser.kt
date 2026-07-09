@@ -63,6 +63,10 @@ class EventParser(
         register("request:friend", FriendRequestEvent.serializer())
         register("request:group", GroupRequestEvent.serializer())
 
+        // message_sent (NapCat)
+        register("message_sent:group", MessageSentEvent.serializer())
+        register("message_sent:private", MessageSentEvent.serializer())
+
         // meta_event
         register("meta_event:lifecycle", LifecycleMetaEvent.serializer())
         register("meta_event:heartbeat", HeartbeatMetaEvent.serializer())
@@ -142,6 +146,7 @@ class EventParser(
 
             "request" -> "$postType:${root["request_type"]?.jsonPrimitive?.content ?: ""}"
             "meta_event" -> "$postType:${root["meta_event_type"]?.jsonPrimitive?.content ?: ""}"
+            "message_sent" -> "$postType:${root["message_type"]?.jsonPrimitive?.content ?: ""}"
             else -> postType
         }
     }
@@ -166,6 +171,7 @@ class EventParser(
             is GroupRequestEvent -> "request:group"
             is LifecycleMetaEvent -> "meta_event:lifecycle"
             is HeartbeatMetaEvent -> "meta_event:heartbeat"
+            is MessageSentEvent -> "message_sent:${event.messageType}"
             is RawEvent -> ""
         }
     }

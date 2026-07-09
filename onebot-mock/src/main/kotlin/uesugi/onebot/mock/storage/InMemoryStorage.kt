@@ -86,6 +86,7 @@ class InMemoryStorage(override val selfId: Long = 10001) : MockStorage {
         val msgId = when (event) {
             is PrivateMessageEvent -> if (event.messageId > 0) event.messageId else messageIdCounter.getAndIncrement()
             is GroupMessageEvent -> if (event.messageId > 0) event.messageId else messageIdCounter.getAndIncrement()
+            is MessageSentEvent -> if (event.messageId > 0) event.messageId else messageIdCounter.getAndIncrement()
         }
         val info = when (event) {
             is PrivateMessageEvent -> MessageInfo(
@@ -98,11 +99,24 @@ class InMemoryStorage(override val selfId: Long = 10001) : MockStorage {
                 realId = msgId, sender = Sender(event.userId, event.sender.nickname),
                 message = event.message
             )
+
+            is MessageSentEvent -> MessageInfo(
+                time = event.time, messageType = event.messageType, messageId = msgId,
+                realId = msgId, sender = Sender(event.userId, event.sender.nickname),
+                message = event.message
+            )
         }
         messages[msgId] = info
         when (event) {
             is GroupMessageEvent -> groupMessages.getOrPut(event.groupId) { CopyOnWriteArrayList() }.add(msgId)
             is PrivateMessageEvent -> privateMessages.getOrPut(event.userId) { CopyOnWriteArrayList() }.add(msgId)
+            is MessageSentEvent -> {
+                if (event.isGroupMessage && event.groupId != null) {
+                    groupMessages.getOrPut(event.groupId) { CopyOnWriteArrayList() }.add(msgId)
+                } else {
+                    privateMessages.getOrPut(event.userId) { CopyOnWriteArrayList() }.add(msgId)
+                }
+            }
         }
         return info
     }

@@ -40,6 +40,13 @@ fun OneBotClient.onMetaEvent(handler: suspend (MetaEvent) -> Unit) {
     }
 }
 
+/** 监听消息发送事件（message_sent） */
+fun OneBotClient.onMessageSent(handler: suspend (MessageSentEvent) -> Unit) {
+    onEvent("message_sent") { event ->
+        if (event is MessageSentEvent) handler(event)
+    }
+}
+
 // 过滤式监听器 — 带 filter 参数
 
 /** 监听私聊消息事件（仅当 [filter] 返回 true 时触发） */
@@ -89,6 +96,16 @@ fun OneBotClient.onMetaEvent(
 ) {
     onEvent("meta_event") { event ->
         if (event is MetaEvent && filter(event)) handler(event)
+    }
+}
+
+/** 监听消息发送事件（仅当 [filter] 返回 true 时触发） */
+fun OneBotClient.onMessageSent(
+    filter: (MessageSentEvent) -> Boolean,
+    handler: suspend (MessageSentEvent) -> Unit
+) {
+    onEvent("message_sent") { event ->
+        if (event is MessageSentEvent && filter(event)) handler(event)
     }
 }
 
@@ -197,6 +214,33 @@ fun OneBotClient.onRequest(dsl: RequestListenerBuilder.() -> Unit) {
     val handler = b.handler ?: return
     onEvent("request") { event ->
         if (event is RequestEvent && filters.all { it(event) }) {
+            handler(event)
+        }
+    }
+}
+
+// -- 消息发送事件 DSL --
+
+class MessageSentListenerBuilder {
+    internal val filters = mutableListOf<(MessageSentEvent) -> Boolean>()
+    internal var handler: (suspend (MessageSentEvent) -> Unit)? = null
+
+    fun where(predicate: (MessageSentEvent) -> Boolean) {
+        filters.add(predicate)
+    }
+
+    fun handle(action: suspend (MessageSentEvent) -> Unit) {
+        handler = action
+    }
+}
+
+/** DSL 方式监听消息发送事件，支持多个 [where] 过滤条件 */
+fun OneBotClient.onMessageSent(dsl: MessageSentListenerBuilder.() -> Unit) {
+    val b = MessageSentListenerBuilder().apply(dsl)
+    val filters = b.filters.toList()
+    val handler = b.handler ?: return
+    onEvent("message_sent") { event ->
+        if (event is MessageSentEvent && filters.all { it(event) }) {
             handler(event)
         }
     }
