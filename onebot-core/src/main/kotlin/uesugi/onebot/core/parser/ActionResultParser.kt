@@ -53,6 +53,7 @@ class ActionResultParser {
         // 能力检查
         register(ActionName.CAN_SEND_IMAGE, CanSendResult.serializer())
         register(ActionName.CAN_SEND_RECORD, CanSendResult.serializer())
+        register(ActionName.CAN_SEND_MARKDOWN, CanSendResult.serializer())
 
         // 状态
         register(ActionName.GET_STATUS, StatusInfo.serializer())
